@@ -1,0 +1,222 @@
+# app/main.py
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import FastAPI, Depends
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.db import init_db, get_db, SessionLocal
+from app.seed import seed_targets
+from app.settings import ENVIRONMENT
+
+app = FastAPI(title="EWS Monitoring (ewsmon)")
+
+# Serve UI assets (index.html, app.js, css, etc.)
+# Ensure these files exist in the container at /app/app/static
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
+    with SessionLocal() as db:
+        created = seed_targets(db)
+        if created:
+            print(f"[startup] seeded {created} api targets")
+
+
+@app.get("/health")
+def health(db: Session = Depends(get_db)):
+    db.execute(text("SELECT 1"))
+    return {"status": "ok", "env": ENVIRONMENT}
+
+
+@app.get("/")
+def root():
+    # UI lives here
+    return {"message": "ewsmon is running. Open /static/index.html", "env": ENVIRONMENT}
+
+
+# -----------------------------
+# API used by the frontend UI
+# -----------------------------
+
+@app.get("/api/targets")
+def api_targets(db: Session = Depends(get_db)) -> list[dict[str, Any]]:
+    rows = db.execute(
+        text(
+            """
+            select id, name, url, soap_action, api_type, enabled
+            from api_target
+            order by name
+            """
+        )
+    ).mappings().all()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/summary")
+def api_summary(db: Session = Depends(get_db)) -> dict[str, Any]:
+    """
+    Frontend expects either:
+      - an array
+      - OR an object with `items: [...]`
+
+    We return:
+      { generated_at, totals, items }
+    where:
+      - items[] includes `uptime_today` and `uptime_7d` as ratios (0..1),
+        because app.js's fmtPct() multiplies by 100.
+    """
+    rows = db.execute(
+        text(
+            """
+            with last_probe as (
+              select distinct on (p.target_id)
+                p.target_id,
+                p.ts,
+                p.ok,
+                p.http_status,
+                p.duration_ms
+              from api_probe p
+              order by p.target_id, p.ts desc, p.id desc
+            ),
+            today as (
+              select
+                p.target_id,
+                count(*)::int as total,
+                sum(case when p.ok then 1 else 0 end)::int as ok_count,
+                avg(p.duration_ms) as avg_ms
+              from api_probe p
+              where p.ts >= date_trunc('day', now())
+              group by p.target_id
+            ),
+            wk as (
+              select
+                p.target_id,
+                count(*)::int as total,
+                sum(case when p.ok then 1 else 0 end)::int as ok_count,
+                avg(p.duration_ms) as avg_ms
+              from api_probe p
+              where p.ts >= (now() - interval '7 days')
+              group by p.target_id
+            )
+            select
+              t.id,
+              t.name,
+              t.api_type,
+              t.url,
+              lp.ts as last_checked,
+              lp.ok as last_ok,
+              lp.http_status as http_status,
+              lp.duration_ms as last_ms,
+              coalesce(today.total, 0) as today_total,
+              coalesce(today.ok_count, 0) as today_ok,
+              today.avg_ms as today_avg_ms,
+              coalesce(wk.total, 0) as wk_total,
+              coalesce(wk.ok_count, 0) as wk_ok,
+              wk.avg_ms as wk_avg_ms
+            from api_target t
+            left join last_probe lp on lp.target_id = t.id
+            left join today on today.target_id = t.id
+            left join wk on wk.target_id = t.id
+            where t.enabled = true
+            order by t.name
+            """
+        )
+    ).mappings().all()
+
+    items: list[dict[str, Any]] = []
+    up = 0
+    down = 0
+    slowest_name = None
+    slowest_ms = None
+
+    for r in rows:
+        last_ok = bool(r["last_ok"]) if r["last_ok"] is not None else False
+        is_up = bool(r["last_checked"]) and last_ok
+
+        if is_up:
+            up += 1
+        else:
+            down += 1
+
+        last_ms = float(r["last_ms"]) if r["last_ms"] is not None else None
+        if last_ms is not None and (slowest_ms is None or last_ms > slowest_ms):
+            slowest_ms = last_ms
+            slowest_name = r["name"]
+
+        today_total = int(r["today_total"] or 0)
+        wk_total = int(r["wk_total"] or 0)
+
+        # IMPORTANT: keep these as ratios 0..1 (JS fmtPct multiplies by 100)
+        today_uptime = (float(r["today_ok"]) / today_total) if today_total > 0 else None
+        wk_uptime = (float(r["wk_ok"]) / wk_total) if wk_total > 0 else None
+
+        items.append(
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "api_type": r["api_type"],
+                "url": r["url"],
+                "last_checked": r["last_checked"].isoformat() if r["last_checked"] else None,
+                "is_up": is_up,
+                "http_status": r["http_status"],
+                "last_ms": round(last_ms, 2) if last_ms is not None else None,
+                "avg_today_ms": round(float(r["today_avg_ms"]), 2) if r["today_avg_ms"] is not None else None,
+                "avg_7d_ms": round(float(r["wk_avg_ms"]), 2) if r["wk_avg_ms"] is not None else None,
+                "uptime_today": today_uptime,
+                "uptime_7d": wk_uptime,
+            }
+        )
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "totals": {
+            "services": len(items),
+            "up": up,
+            "down": down,
+            "slowest_last": {
+                "name": slowest_name,
+                "ms": round(slowest_ms, 2) if slowest_ms is not None else None,
+            },
+        },
+        # ✅ app.js reads data.items
+        "items": items,
+        # optional compat keys (harmless)
+        "services": items,
+        "rows": items,
+    }
+
+
+@app.get("/api/targets/{target_id}/probes")
+def api_target_probes(
+    target_id: int,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Recent probes for a given target (for charts).
+    """
+    limit = max(1, min(limit, 500))
+
+    rows = db.execute(
+        text(
+            """
+            select ts, ok, http_status, duration_ms, error
+            from api_probe
+            where target_id = :target_id
+            order by ts desc, id desc
+            limit :limit
+            """
+        ),
+        {"target_id": target_id, "limit": limit},
+    ).mappings().all()
+
+    # return oldest->newest (nice for charting)
+    probes = list(reversed([dict(r) for r in rows]))
+    return {"target_id": target_id, "count": len(probes), "probes": probes}

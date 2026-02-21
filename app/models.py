@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+from datetime import datetime, date
+
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy import (
+    String, Integer, Float, Boolean,
+    DateTime, ForeignKey, Date, Text,
+    UniqueConstraint, func
+)
+
+class Base(DeclarativeBase):
+    pass
+
+class ApiTarget(Base):
+    __tablename__ = "api_target"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    soap_action: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    api_type: Mapped[str] = mapped_column(String(50), nullable=False)  # validate/track/etc.
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    probes: Mapped[list["ApiProbe"]] = relationship(back_populates="target")
+
+class ApiProbe(Base):
+    __tablename__ = "api_probe"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("api_target.id"), nullable=False)
+
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    ok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    target: Mapped["ApiTarget"] = relationship(back_populates="probes")
+
+class ApiDailyRollup(Base):
+    __tablename__ = "api_daily_rollup"
+    __table_args__ = (
+        UniqueConstraint("target_id", "day", name="uq_rollup_target_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("api_target.id"), nullable=False)
+
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+
+    total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ok_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    avg_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    p95_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    target: Mapped["ApiTarget"] = relationship()

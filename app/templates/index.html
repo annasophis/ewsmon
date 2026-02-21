@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EWS Monitoring</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <div class="title">EWS Monitoring</div>
+        <div class="subtitle">Live SOAP probes • latency • uptime</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="pill" id="lastUpdated">Last updated: —</div>
+      <button class="btn" id="refreshBtn">Refresh</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="cards">
+      <div class="card">
+        <div class="cardLabel">Services</div>
+        <div class="cardValue" id="svcCount">—</div>
+      </div>
+      <div class="card">
+        <div class="cardLabel">Up</div>
+        <div class="cardValue ok" id="upCount">—</div>
+      </div>
+      <div class="card">
+        <div class="cardLabel">Down</div>
+        <div class="cardValue bad" id="downCount">—</div>
+      </div>
+      <div class="card">
+        <div class="cardLabel">Slowest (last)</div>
+        <div class="cardValue" id="slowest">—</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panelHeader">
+        <div class="panelTitle">Service Status</div>
+        <div class="panelHint">Auto-refresh every 10 seconds</div>
+      </div>
+
+      <div class="tableWrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Service</th>
+              <th>Status</th>
+              <th>Last Checked</th>
+              <th class="num">Last (ms)</th>
+              <th class="num">HTTP</th>
+              <th class="num">Avg (Today)</th>
+              <th class="num">Avg (7d)</th>
+              <th class="num">Uptime (Today)</th>
+              <th class="num">Uptime (7d)</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="9" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span class="muted">Tip: keep this open on a monitor; it’ll update automatically.</span>
+    </footer>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

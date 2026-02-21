@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ews
+      POSTGRES_USER: ews
+      POSTGRES_PASSWORD: ews
+    volumes:
+      - ewsmon_pg:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"   # dev-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ews -d ews"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ews:ews@db:5432/ews
+      ENVIRONMENT: dev
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8008:8000"
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["python", "-m", "app.worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ews:ews@db:5432/ews
+      ENVIRONMENT: dev
+      POLL_INTERVAL_SECONDS: "10"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  ewsmon_pg:
