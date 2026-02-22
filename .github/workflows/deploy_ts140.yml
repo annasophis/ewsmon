@@ -1,0 +1,20 @@
+name: Deploy to TS140
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy latest main on TS140
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /home/bruno/docker/ewsmon
+          git fetch --all
+          git reset --hard origin/main
+          docker compose -f docker-compose.dev.yml up -d --build
+          docker compose -f docker-compose.dev.yml ps
+          docker image prune -f
