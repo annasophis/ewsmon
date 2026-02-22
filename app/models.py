@@ -56,3 +56,27 @@ class ApiDailyRollup(Base):
     p95_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     target: Mapped["ApiTarget"] = relationship()
+
+class SiteNotice(Base):
+    __tablename__ = "site_notice"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)  # we'll use id=1
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    notice_type: Mapped[str] = mapped_column(String(30), nullable=False, default="info")  # info|warning|maintenance
+    message: Mapped[str] = mapped_column(Text, nullable=False, default="All systems operational.")
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class ApiNote(Base):
+    __tablename__ = "api_note"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    target_id: Mapped[int] = mapped_column(ForeignKey("api_target.id", ondelete="CASCADE"), nullable=False)
+
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    target: Mapped["ApiTarget"] = relationship()

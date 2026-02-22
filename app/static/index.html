@@ -4,7 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>EWS Monitoring</title>
-  <link rel="stylesheet" href="/static/style.css" />
+
+  <!-- cache-bust to avoid stale CSS/JS while iterating -->
+  <link rel="stylesheet" href="/static/style.css?v=2" />
 </head>
 <body>
   <header class="topbar">
@@ -21,6 +23,9 @@
       <button class="btn" id="refreshBtn">Refresh</button>
     </div>
   </header>
+
+  <!-- ✅ Banner MUST be outside the header (topbar is usually a flex row) -->
+  <div id="banner" class="banner" style="display:none"></div>
 
   <main class="wrap">
     <section class="cards">
@@ -61,10 +66,15 @@
               <th class="num">Avg (7d)</th>
               <th class="num">Uptime (Today)</th>
               <th class="num">Uptime (7d)</th>
+
+              <!-- ✅ NEW -->
+              <th style="width:90px;">Notes</th>
             </tr>
           </thead>
+
           <tbody id="rows">
-            <tr><td colspan="9" class="muted">Loading…</td></tr>
+            <!-- ✅ colspan updated from 9 -> 10 -->
+            <tr><td colspan="10" class="muted">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -75,6 +85,32 @@
     </footer>
   </main>
 
-  <script src="/static/app.js"></script>
+  <!-- ✅ Notes Modal (paste once) -->
+  <div id="notesModalBackdrop" class="modal-backdrop hidden"></div>
+
+  <div id="notesModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="notesModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="notesModalTitle">API Notes</div>
+          <div class="modal-subtitle" id="notesModalSubtitle"></div>
+        </div>
+
+        <button type="button" class="modal-close" id="notesModalClose" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="notesModalState" class="modal-state"></div>
+        <div id="notesModalList" class="notes-list"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="notesModalClose2">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- cache-bust while iterating -->
+  <script src="/static/app.js?v=2"></script>
 </body>
 </html>

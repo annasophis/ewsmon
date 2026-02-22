@@ -13,6 +13,10 @@ from app.db import init_db, get_db, SessionLocal
 from app.seed import seed_targets
 from app.settings import ENVIRONMENT
 
+from fastapi import Request, HTTPException
+from pydantic import BaseModel
+from app.models import SiteNotice, ApiNote
+
 app = FastAPI(title="EWS Monitoring (ewsmon)")
 
 # Serve UI assets (index.html, app.js, css, etc.)
@@ -20,13 +24,27 @@ app = FastAPI(title="EWS Monitoring (ewsmon)")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
+from app.models import SiteNotice
+
 @app.on_event("startup")
 def on_startup():
     init_db()
+
     with SessionLocal() as db:
         created = seed_targets(db)
-        if created:
-            print(f"[startup] seeded {created} api targets")
+
+        # Ensure a banner row exists (id=1)
+        exists = db.query(SiteNotice).filter(SiteNotice.id == 1).first()
+        if not exists:
+            db.add(
+                SiteNotice(
+                    id=1,
+                    enabled=False,
+                    notice_type="info",
+                    message="All systems operational."
+                )
+            )
+            db.commit()
 
 
 @app.get("/health")
@@ -35,11 +53,11 @@ def health(db: Session = Depends(get_db)):
     return {"status": "ok", "env": ENVIRONMENT}
 
 
-@app.get("/")
-def root():
-    # UI lives here
-    return {"message": "ewsmon is running. Open /static/index.html", "env": ENVIRONMENT}
+from fastapi.responses import RedirectResponse
 
+@app.get("/", include_in_schema=False)
+def home():
+    return RedirectResponse(url="/static/index.html")
 
 # -----------------------------
 # API used by the frontend UI
@@ -220,3 +238,101 @@ def api_target_probes(
     # return oldest->newest (nice for charting)
     probes = list(reversed([dict(r) for r in rows]))
     return {"target_id": target_id, "count": len(probes), "probes": probes}
+
+@app.get("/api/notices")
+def api_notices(db: Session = Depends(get_db)):
+    row = db.query(SiteNotice).filter(SiteNotice.id == 1).first()
+
+    if not row:
+        return {"banner": {"enabled": False}}
+
+    return {
+        "banner": {
+            "enabled": row.enabled,
+            "type": row.notice_type,
+            "message": row.message,
+            "starts_at": row.starts_at.isoformat() if row.starts_at else None,
+            "ends_at": row.ends_at.isoformat() if row.ends_at else None,
+        }
+    }
+
+from fastapi import HTTPException, Request
+from app.settings import ADMIN_KEY
+
+def require_admin(request: Request):
+    if not ADMIN_KEY:
+        raise HTTPException(500, "ADMIN_KEY not set")
+    if request.headers.get("x-admin-key") != ADMIN_KEY:
+        raise HTTPException(401, "Unauthorized")
+    
+
+class BannerUpdate(BaseModel):
+    enabled: bool
+    notice_type: str
+    message: str
+    starts_at: str | None = None
+    ends_at: str | None = None
+
+
+@app.put("/api/admin/notices/banner")
+def update_banner(payload: BannerUpdate, request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
+
+    row = db.query(SiteNotice).filter(SiteNotice.id == 1).first()
+
+    row.enabled = payload.enabled
+    row.notice_type = payload.notice_type
+    row.message = payload.message
+    row.starts_at = payload.starts_at
+    row.ends_at = payload.ends_at
+
+    db.commit()
+
+    return {"ok": True}
+
+@app.get("/api/targets/{target_id}/notes")
+def get_notes(target_id: int, db: Session = Depends(get_db)):
+    notes = (
+        db.query(ApiNote)
+        .filter(ApiNote.target_id == target_id)
+        .order_by(ApiNote.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    return {
+        "items": [
+            {
+                "id": n.id,
+                "title": n.title,
+                "body": n.body,
+                "created_at": n.created_at.isoformat(),
+            }
+            for n in notes
+        ]
+    }
+
+class NoteCreate(BaseModel):
+    title: str
+    body: str
+
+
+@app.post("/api/admin/targets/{target_id}/notes")
+def create_note(
+    target_id: int,
+    payload: NoteCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_admin(request)
+
+    note = ApiNote(
+        target_id=target_id,
+        title=payload.title,
+        body=payload.body,
+    )
+
+    db.add(note)
+    db.commit()
+
+    return {"ok": True}

@@ -1,4 +1,5 @@
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -35,3 +36,9 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
 # ----------------------------
 PROBE_RETENTION_DAYS = int(os.getenv("PROBE_RETENTION_DAYS", "14"))
 CLEANUP_EVERY_SECONDS = int(os.getenv("CLEANUP_EVERY_SECONDS", str(60*60)))  # 1 hour
+
+# ----------------------------
+# Future Admin Backend
+# ----------------------------
+
+ADMIN_KEY = os.getenv("ADMIN_KEY", "")

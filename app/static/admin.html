@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EWS Monitoring — Admin</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; max-width: 980px; }
+    h1 { margin: 0 0 12px; }
+    .muted { opacity: .7; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 14px; }
+    label { display: block; font-size: 13px; margin: 10px 0 6px; }
+    input[type="text"], input[type="password"], textarea, select {
+      width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ccc; font-size: 14px;
+    }
+    textarea { min-height: 90px; resize: vertical; }
+    .btns { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #222; background: #111; color: #fff; cursor: pointer; }
+    button.secondary { background: #fff; color: #111; border-color: #aaa; }
+    button.danger { background: #b00020; border-color: #b00020; }
+    pre { background: #f7f7f7; border: 1px solid #e6e6e6; padding: 12px; border-radius: 12px; overflow: auto; }
+    .pill { display:inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; border: 1px solid #ddd; }
+    .ok { background: #eaffea; border-color:#b7f0b7; }
+    .bad { background: #ffe9ea; border-color:#ffb9be; }
+  </style>
+</head>
+
+<body>
+  <h1>EWS Monitoring — Admin</h1>
+  <div class="muted">Basic admin UI (uses <code>x-admin-key</code> header). No auth flow yet.</div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2 style="margin:0 0 8px;">Admin Key</h2>
+    <div class="muted">Stored only in this browser (localStorage). Required for all /api/admin/* calls.</div>
+    <label for="adminKey">x-admin-key</label>
+    <input id="adminKey" type="password" placeholder="Paste ADMIN_KEY here" />
+    <div class="btns">
+      <button id="saveKeyBtn">Save key</button>
+      <button id="clearKeyBtn" class="secondary" type="button">Clear</button>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:16px;">
+    <!-- Banner -->
+    <div class="card">
+      <h2 style="margin:0 0 8px;">Banner</h2>
+      <div id="bannerStatus" class="pill">Loading…</div>
+
+      <label>
+        <input type="checkbox" id="bannerEnabled" />
+        Enabled
+      </label>
+
+      <label for="bannerType">notice_type</label>
+      <select id="bannerType">
+        <option value="info">info</option>
+        <option value="maintenance">maintenance</option>
+        <option value="warning">warning</option>
+        <option value="incident">incident</option>
+      </select>
+
+      <label for="bannerMessage">message</label>
+      <textarea id="bannerMessage" placeholder="Planned maintenance Sunday 2:00–3:00 AM ET"></textarea>
+
+      <label for="bannerStartsAt">starts_at (ISO, optional)</label>
+      <input id="bannerStartsAt" type="text" placeholder="2026-02-23T02:00:00-05:00">
+
+      <label for="bannerEndsAt">ends_at (ISO, optional)</label>
+      <input id="bannerEndsAt" type="text" placeholder="2026-02-23T03:00:00-05:00">
+
+      <div class="btns">
+        <button id="saveBannerBtn">Save banner</button>
+        <button id="disableBannerBtn" class="danger" type="button">Disable banner</button>
+        <button id="reloadBannerBtn" class="secondary" type="button">Reload</button>
+      </div>
+
+      <label style="margin-top:12px;">Raw banner (GET /api/notices)</label>
+      <pre id="bannerRaw">{}</pre>
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+      <h2 style="margin:0 0 8px;">Per-API Notes</h2>
+      <div class="muted">Pick a target (from /api/summary), add a note, preview notes.</div>
+
+      <label for="targetSelect">Target</label>
+      <select id="targetSelect"></select>
+
+      <label for="noteTitle">title</label>
+      <input id="noteTitle" type="text" placeholder="Maintenance window" />
+
+      <label for="noteBody">body</label>
+      <textarea id="noteBody" placeholder="Planned maintenance Sunday 2–3 AM ET. Some requests may time out."></textarea>
+
+      <div class="btns">
+        <button id="addNoteBtn">Add note</button>
+        <button id="previewNotesBtn" class="secondary" type="button">Preview notes</button>
+        <button id="reloadTargetsBtn" class="secondary" type="button">Reload targets</button>
+      </div>
+
+      <label style="margin-top:12px;">Notes preview (GET /api/targets/{id}/notes)</label>
+      <pre id="notesPreview">[]</pre>
+    </div>
+  </div>
+
+  <script>
+    const API = {
+      SUMMARY_GET: "/api/summary",
+      NOTICES_GET: "/api/notices",
+      BANNER_PUT: "/api/admin/notices/banner",
+      NOTE_ADD_POST: (id) => `/api/admin/targets/${encodeURIComponent(id)}/notes`,
+      NOTES_GET: (id) => `/api/targets/${encodeURIComponent(id)}/notes`,
+    };
+
+    function $(id){ return document.getElementById(id); }
+
+    function getAdminKey(){
+      return localStorage.getItem("ewsmon_admin_key") || "";
+    }
+    function setAdminKey(v){
+      localStorage.setItem("ewsmon_admin_key", v);
+    }
+    function clearAdminKey(){
+      localStorage.removeItem("ewsmon_admin_key");
+    }
+
+    async function fetchJson(url, opts={}){
+      const res = await fetch(url, {
+        cache: "no-store",
+        headers: { "Accept":"application/json", ...(opts.headers || {}) },
+        ...opts
+      });
+      if (!res.ok){
+        const txt = await res.text().catch(() => "");
+        throw new Error(`${url} -> ${res.status} ${txt}`);
+      }
+      return await res.json();
+    }
+
+    function adminHeaders(extra={}){
+      const key = getAdminKey();
+      return {
+        "x-admin-key": key,
+        ...extra
+      };
+    }
+
+    function setPill(el, text, kind){
+      el.textContent = text;
+      el.className = "pill " + (kind || "");
+    }
+
+    // ---------- Targets ----------
+    async function loadTargets(){
+      const sel = $("targetSelect");
+      sel.innerHTML = `<option>Loading…</option>`;
+      const data = await fetchJson(API.SUMMARY_GET);
+      const items = Array.isArray(data) ? data : (data.items || []);
+
+      const mapped = items.map(it => ({
+        id: it.id ?? it.target_id ?? it.targetId ?? it.service_id,
+        name: it.name ?? it.service ?? it.service_name ?? "—"
+      })).filter(x => x.id !== undefined && x.id !== null);
+
+      sel.innerHTML = mapped.length
+        ? mapped.map(x => `<option value="${String(x.id)}">${String(x.name)} (id: ${String(x.id)})</option>`).join("")
+        : `<option value="">No targets found (summary missing id)</option>`;
+    }
+
+    // ---------- Banner ----------
+    async function loadBanner(){
+      const raw = await fetchJson(API.NOTICES_GET).catch(() => null);
+      $("bannerRaw").textContent = JSON.stringify(raw, null, 2);
+
+      const b = raw?.banner || null;
+      if (!b){
+        setPill($("bannerStatus"), "No banner object found", "bad");
+        return;
+      }
+
+      $("bannerEnabled").checked = !!b.enabled;
+      $("bannerType").value = b.type || "info";
+      $("bannerMessage").value = b.message || "";
+      $("bannerStartsAt").value = b.starts_at || "";
+      $("bannerEndsAt").value = b.ends_at || "";
+
+      setPill($("bannerStatus"), b.enabled ? `Enabled (${b.type || "info"})` : "Disabled", b.enabled ? "ok" : "");
+    }
+
+    async function saveBanner(enabledOverride=null){
+      const enabled = (enabledOverride !== null) ? enabledOverride : $("bannerEnabled").checked;
+
+      const payload = {
+        enabled,
+        notice_type: $("bannerType").value,
+        message: $("bannerMessage").value,
+        starts_at: $("bannerStartsAt").value || null,
+        ends_at: $("bannerEndsAt").value || null
+      };
+
+      await fetchJson(API.BANNER_PUT, {
+        method: "PUT",
+        headers: adminHeaders({ "Content-Type":"application/json" }),
+        body: JSON.stringify(payload)
+      });
+
+      await loadBanner();
+      alert(enabled ? "Banner saved ✅" : "Banner disabled ✅");
+    }
+
+    // ---------- Notes ----------
+    async function addNote(){
+      const targetId = $("targetSelect").value;
+      if (!targetId){
+        alert("Select a target first.");
+        return;
+      }
+
+      const title = $("noteTitle").value.trim();
+      const body = $("noteBody").value.trim();
+      if (!title || !body){
+        alert("Title + body are required.");
+        return;
+      }
+
+      const payload = { title, body };
+
+      await fetchJson(API.NOTE_ADD_POST(targetId), {
+        method: "POST",
+        headers: adminHeaders({ "Content-Type":"application/json" }),
+        body: JSON.stringify(payload)
+      });
+
+      $("noteTitle").value = "";
+      $("noteBody").value = "";
+      alert("Note added ✅");
+      await previewNotes();
+    }
+
+    async function previewNotes(){
+      const targetId = $("targetSelect").value;
+      if (!targetId){
+        $("notesPreview").textContent = "[]";
+        return;
+      }
+      const data = await fetchJson(API.NOTES_GET(targetId));
+      $("notesPreview").textContent = JSON.stringify(data, null, 2);
+    }
+
+    // ---------- Wire up ----------
+    $("saveKeyBtn").addEventListener("click", () => {
+      setAdminKey($("adminKey").value.trim());
+      alert("Saved ✅");
+    });
+    $("clearKeyBtn").addEventListener("click", () => {
+      clearAdminKey();
+      $("adminKey").value = "";
+      alert("Cleared ✅");
+    });
+
+    $("reloadTargetsBtn").addEventListener("click", () => loadTargets().catch(e => alert(e.message)));
+    $("previewNotesBtn").addEventListener("click", () => previewNotes().catch(e => alert(e.message)));
+    $("addNoteBtn").addEventListener("click", () => addNote().catch(e => alert(e.message)));
+
+    $("reloadBannerBtn").addEventListener("click", () => loadBanner().catch(e => alert(e.message)));
+    $("saveBannerBtn").addEventListener("click", () => saveBanner(null).catch(e => alert(e.message)));
+    $("disableBannerBtn").addEventListener("click", () => saveBanner(false).catch(e => alert(e.message)));
+
+    // ---------- Init ----------
+    (async function init(){
+      $("adminKey").value = getAdminKey();
+
+      try { await loadTargets(); }
+      catch(e){ console.error(e); alert("Failed to load targets: " + e.message); }
+
+      try { await loadBanner(); }
+      catch(e){ console.error(e); alert("Failed to load banner: " + e.message); }
+    })();
+  </script>
+</body>
+</html>
