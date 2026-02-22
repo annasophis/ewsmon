@@ -6,15 +6,24 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: [self-hosted, ts140]
     steps:
       - name: Deploy latest main on TS140
         shell: bash
         run: |
           set -euo pipefail
           cd /home/bruno/docker/ewsmon
+
+          echo "== pulling latest =="
           git fetch --all
           git reset --hard origin/main
-          docker compose -f docker-compose.dev.yml up -d --build
+          echo "Deployed commit: $(git rev-parse --short HEAD)"
+
+          echo "== compose up (force recreate) =="
+          docker compose -f docker-compose.dev.yml up -d --build --force-recreate
+
+          echo "== status =="
           docker compose -f docker-compose.dev.yml ps
+
+          echo "== cleanup =="
           docker image prune -f
