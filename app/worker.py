@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import datetime, timezone
-from typing import Tuple, Dict, Optional, Any, List
+from typing import Tuple, Dict, Optional
 
 import httpx
 from sqlalchemy import select, text
@@ -30,7 +30,8 @@ def build_payload(target: ApiTarget) -> Tuple[Optional[str], Dict[str, str]]:
     headers: Dict[str, str] = {
         "Content-Type": "text/xml;charset=UTF-8",
     }
-    # SOAPAction is critical for Purolator EWS
+
+    # SOAPAction is critical for Purolator EWS (when required by the service)
     if target.soap_action:
         headers["SOAPAction"] = target.soap_action
 
@@ -369,6 +370,38 @@ def build_payload(target: ApiTarget) -> Tuple[Optional[str], Dict[str, str]]:
 """
         return soap_request.strip(), headers
 
+    if target.api_type == "shiptrack":
+        # Prefer explicit v2 prefix to avoid namespace ambiguity
+        soap_request = f"""<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:v2="http://purolator.com/pws/datatypes/v2">
+  <soapenv:Header>
+    <v2:RequestContext>
+      <v2:Version>2.0</v2:Version>
+      <v2:Language>en</v2:Language>
+      <v2:GroupID>Purolator</v2:GroupID>
+      <v2:RequestReference>Shipment Tracking Service</v2:RequestReference>
+    </v2:RequestContext>
+  </soapenv:Header>
+  <soapenv:Body>
+    <v2:TrackingByPinsOrReferencesRequest>
+      <v2:TrackingSearchCriteria>
+        <v2:searches>
+          <v2:search>
+            <v2:trackingId>520111990344</v2:trackingId>
+            <v2:shipmentDateFrom>2025-01-01</v2:shipmentDateFrom>
+            <v2:shipmentDateTo>2026-02-18</v2:shipmentDateTo>
+            <v2:pod>false</v2:pod>
+            <v2:shipmentView>true</v2:shipmentView>
+            <v2:account>{acct}</v2:account>
+          </v2:search>
+        </v2:searches>
+      </v2:TrackingSearchCriteria>
+    </v2:TrackingByPinsOrReferencesRequest>
+  </soapenv:Body>
+</soapenv:Envelope>
+"""
+        return soap_request.strip(), headers
+
     if target.api_type == "return":
         soap_request = f"""<?xml version="1.0" encoding="utf-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:v2="http://purolator.com/pws/datatypes/v2">
@@ -542,11 +575,21 @@ async def probe_one(client: httpx.AsyncClient, target: ApiTarget) -> dict:
             auth=(settings.PUROLATOR_KEY, settings.PUROLATOR_PASSWORD),
         )
         ms = (time.perf_counter() - start) * 1000.0
+
         ok = resp.status_code == 200
-        return {"ok": ok, "status": resp.status_code, "ms": ms, "error": None if ok else f"http {resp.status_code}"}
+        if ok:
+            return {"ok": True, "status": resp.status_code, "ms": ms, "error": None}
+
+        # Capture some upstream info for debugging (stored in ApiProbe.error)
+        ct = resp.headers.get("content-type", "")
+        body_snip = (resp.text or "")[:800].replace("\n", "\\n")
+        err = f"http {resp.status_code} ct={ct} body_snip={body_snip}"
+
+        return {"ok": False, "status": resp.status_code, "ms": ms, "error": err}
+
     except Exception as e:
         ms = (time.perf_counter() - start) * 1000.0
-        return {"ok": False, "status": None, "ms": ms, "error": str(e)}
+        return {"ok": False, "status": None, "ms": ms, "error": f"{type(e).__name__}: {e}"}
 
 
 def persist_probes(db: Session, results: list[tuple[int, dict]]) -> int:

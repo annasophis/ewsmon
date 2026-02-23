@@ -44,6 +44,12 @@ DEFAULT_TARGETS = [
         "soap_action": "http://purolator.com/pws/service/v2/ValidateReturnShipment",
         "api_type": "return",
     },
+     {
+        "name": "Purolator Shipment Tracking Service",
+        "url": "https://webservices.purolator.com/EWS/V2/ShipmentTracking/ShipmentTrackingService.asmx",
+        "soap_action": "http://purolator.com/pws/service/v2/TrackingByPinsOrReferences",
+        "api_type": "shiptrack",
+    },
 ]
 
 def seed_targets(db: Session) -> int:

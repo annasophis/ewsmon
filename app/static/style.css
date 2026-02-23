@@ -290,3 +290,38 @@
   max-height: 85vh !important;
   overflow: hidden !important;
 }
+
+.footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  
+    /* key fixes */
+    flex-wrap: wrap;
+    padding: 12px 18px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+  }
+  
+  .footer-left {
+    /* allow left side to shrink and wrap instead of pushing right off-screen */
+    flex: 1 1 520px;
+    min-width: 0;
+  }
+  
+  .footer-right {
+    flex: 0 0 auto;
+    white-space: nowrap; /* keep “Need help? …” on one line */
+  }
+  
+  .footer-link {
+    color: #60a5fa; /* a bit more visible on dark bg */
+    text-decoration: none;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+  
+  .footer-link:hover {
+    text-decoration: underline;
+  }
