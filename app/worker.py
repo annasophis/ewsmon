@@ -20,7 +20,36 @@ def _today_yyyy_mm_dd_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-def build_payload(target: ApiTarget) -> Tuple[Optional[str], Dict[str, str]]:
+def _is_uat_target(target: ApiTarget) -> bool:
+    """
+    Detect cert/UAT targets based on the host.
+    (Seed uses certwebservices.purolator.com)
+    """
+    return "://certwebservices.purolator.com" in (target.url or "")
+
+
+def _env_auth_and_account(target: ApiTarget) -> tuple[str, str, str]:
+    """
+    Returns (key, password, account) for the target environment.
+    """
+    if _is_uat_target(target):
+        return (
+            getattr(settings, "PUROLATOR_UAT_KEY", "") or "",
+            getattr(settings, "PUROLATOR_UAT_PASSWORD", "") or "",
+            getattr(settings, "PUROLATOR_UAT_ACCOUNT", "") or "",
+        )
+    return (
+        getattr(settings, "PUROLATOR_KEY", "") or "",
+        getattr(settings, "PUROLATOR_PASSWORD", "") or "",
+        getattr(settings, "PUROLATOR_ACCOUNT", "") or "",
+    )
+
+
+def _env_label(target: ApiTarget) -> str:
+    return "UAT" if _is_uat_target(target) else "PROD"
+
+
+def build_payload(target: ApiTarget, acct: str) -> Tuple[Optional[str], Dict[str, str]]:
     """
     Returns: (soap_xml_string or None, headers_dict)
 
@@ -37,7 +66,6 @@ def build_payload(target: ApiTarget) -> Tuple[Optional[str], Dict[str, str]]:
 
     today = _today_yyyy_mm_dd_utc()
     purolator_date = f"<v1:Date>{today}</v1:Date>"
-    acct = settings.PUROLATOR_ACCOUNT
 
     if target.api_type == "validate":
         soap_request = f"""<?xml version="1.0" encoding="utf-8"?>
@@ -186,7 +214,15 @@ def build_payload(target: ApiTarget) -> Tuple[Optional[str], Dict[str, str]]:
         return soap_request.strip(), headers
 
     if target.api_type == "track":
-        soap_request = """<?xml version="1.0" encoding="utf-8"?>
+        # allow env-specific test PINs
+        pin = (
+            getattr(settings, "PUROLATOR_TRACK_PIN_UAT", None)
+            if _is_uat_target(target)
+            else getattr(settings, "PUROLATOR_TRACK_PIN", None)
+        )
+        pin = pin or "335258857374"
+
+        soap_request = f"""<?xml version="1.0" encoding="utf-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:v1="http://purolator.com/pws/datatypes/v1">
   <soapenv:Header>
     <v1:RequestContext>
@@ -199,7 +235,7 @@ def build_payload(target: ApiTarget) -> Tuple[Optional[str], Dict[str, str]]:
   <soapenv:Body>
     <v1:TrackPackagesByPinRequest>
       <v1:PINs>
-        <v1:PIN><v1:Value>335258857374</v1:Value></v1:PIN>
+        <v1:PIN><v1:Value>{pin}</v1:Value></v1:PIN>
       </v1:PINs>
     </v1:TrackPackagesByPinRequest>
   </soapenv:Body>
@@ -371,6 +407,13 @@ def build_payload(target: ApiTarget) -> Tuple[Optional[str], Dict[str, str]]:
         return soap_request.strip(), headers
 
     if target.api_type == "shiptrack":
+        tracking_id = (
+            getattr(settings, "PUROLATOR_SHIPTRACK_ID_UAT", None)
+            if _is_uat_target(target)
+            else getattr(settings, "PUROLATOR_SHIPTRACK_ID", None)
+        )
+        tracking_id = tracking_id or "520111990344"
+
         # Prefer explicit v2 prefix to avoid namespace ambiguity
         soap_request = f"""<?xml version="1.0" encoding="utf-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:v2="http://purolator.com/pws/datatypes/v2">
@@ -387,7 +430,7 @@ def build_payload(target: ApiTarget) -> Tuple[Optional[str], Dict[str, str]]:
       <v2:TrackingSearchCriteria>
         <v2:searches>
           <v2:search>
-            <v2:trackingId>520111990344</v2:trackingId>
+            <v2:trackingId>{tracking_id}</v2:trackingId>
             <v2:shipmentDateFrom>2025-01-01</v2:shipmentDateFrom>
             <v2:shipmentDateTo>2026-02-18</v2:shipmentDateTo>
             <v2:pod>false</v2:pod>
@@ -556,7 +599,8 @@ def build_payload(target: ApiTarget) -> Tuple[Optional[str], Dict[str, str]]:
 
 
 async def probe_one(client: httpx.AsyncClient, target: ApiTarget) -> dict:
-    soap_xml, headers = build_payload(target)
+    key, pwd, acct = _env_auth_and_account(target)
+    soap_xml, headers = build_payload(target, acct)
 
     if not soap_xml:
         return {
@@ -566,13 +610,18 @@ async def probe_one(client: httpx.AsyncClient, target: ApiTarget) -> dict:
             "error": f"payload not implemented for api_type={target.api_type}",
         }
 
+    # Avoid noisy errors if env vars are missing
+    if not key or not pwd:
+        env = _env_label(target)
+        return {"ok": False, "status": None, "ms": None, "error": f"missing creds for {env} (PUROLATOR_* env vars)"}
+
     start = time.perf_counter()
     try:
         resp = await client.post(
             target.url,
             content=soap_xml,
             headers=headers,
-            auth=(settings.PUROLATOR_KEY, settings.PUROLATOR_PASSWORD),
+            auth=(key, pwd),
         )
         ms = (time.perf_counter() - start) * 1000.0
 
@@ -583,13 +632,13 @@ async def probe_one(client: httpx.AsyncClient, target: ApiTarget) -> dict:
         # Capture some upstream info for debugging (stored in ApiProbe.error)
         ct = resp.headers.get("content-type", "")
         body_snip = (resp.text or "")[:800].replace("\n", "\\n")
-        err = f"http {resp.status_code} ct={ct} body_snip={body_snip}"
+        err = f"[{_env_label(target)}] http {resp.status_code} ct={ct} body_snip={body_snip}"
 
         return {"ok": False, "status": resp.status_code, "ms": ms, "error": err}
 
     except Exception as e:
         ms = (time.perf_counter() - start) * 1000.0
-        return {"ok": False, "status": None, "ms": ms, "error": f"{type(e).__name__}: {e}"}
+        return {"ok": False, "status": None, "ms": ms, "error": f"[{_env_label(target)}] {type(e).__name__}: {e}"}
 
 
 def persist_probes(db: Session, results: list[tuple[int, dict]]) -> int:
@@ -632,7 +681,8 @@ def cleanup_old_probes(db: Session, days: int) -> int:
 async def main():
     init_db()
 
-    interval = int(getattr(settings, "POLL_INTERVAL_SECONDS", 10))
+    # Support both names (your settings.py currently defines WORKER_INTERVAL_SECONDS)
+    interval = int(getattr(settings, "POLL_INTERVAL_SECONDS", getattr(settings, "WORKER_INTERVAL_SECONDS", 10)))
     timeout_seconds = int(getattr(settings, "HTTP_TIMEOUT_SECONDS", 20))
     cleanup_every = int(getattr(settings, "CLEANUP_EVERY_SECONDS", 300))
     retention_days = int(getattr(settings, "PROBE_RETENTION_DAYS", 7))

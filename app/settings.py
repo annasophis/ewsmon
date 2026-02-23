@@ -25,6 +25,18 @@ PUROLATOR_KEY = os.getenv("PUROLATOR_KEY", "")
 PUROLATOR_PASSWORD = os.getenv("PUROLATOR_PASSWORD", "")
 PUROLATOR_ACCOUNT = os.getenv("PUROLATOR_ACCOUNT", "")
 
+# UAT (cert) creds
+PUROLATOR_UAT_KEY = os.getenv("PUROLATOR_UAT_KEY", "")
+PUROLATOR_UAT_PASSWORD = os.getenv("PUROLATOR_UAT_PASSWORD", "")
+PUROLATOR_UAT_ACCOUNT = os.getenv("PUROLATOR_UAT_ACCOUNT", "")
+
+# Optional: environment-specific test data (pins / tracking ids)
+PUROLATOR_TRACK_PIN = os.getenv("PUROLATOR_TRACK_PIN", "335258857374")
+PUROLATOR_TRACK_PIN_UAT = os.getenv("PUROLATOR_TRACK_PIN_UAT", PUROLATOR_TRACK_PIN)
+
+PUROLATOR_SHIPTRACK_ID = os.getenv("PUROLATOR_SHIPTRACK_ID", "520111990344")
+PUROLATOR_SHIPTRACK_ID_UAT = os.getenv("PUROLATOR_SHIPTRACK_ID_UAT", PUROLATOR_SHIPTRACK_ID)
+
 # ----------------------------
 # Alerts (future)
 # ----------------------------
