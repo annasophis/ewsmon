@@ -1,0 +1,15 @@
+name: Ping ts140 runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: [self-hosted, ts140]
+
+    steps:
+      - name: Runner test
+        run: |
+          echo "TS140 runner picked up the job!"
+          hostname
+          date
