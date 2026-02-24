@@ -10,12 +10,15 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import init_db, get_db, SessionLocal
+from app.logger import configure_root_logging, get_logger
 from app.seed import seed_targets
 from app.settings import ENVIRONMENT
 
 from fastapi import Request, HTTPException
 from pydantic import BaseModel
 from app.models import SiteNotice, ApiNote
+
+log = get_logger(__name__)
 
 app = FastAPI(title="EWS Monitoring (ewsmon)")
 
@@ -24,14 +27,34 @@ app = FastAPI(title="EWS Monitoring (ewsmon)")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        log.info(
+            "request",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+            },
+        )
+        return response
+
+app.add_middleware(RequestLoggingMiddleware)
+
 from app.models import SiteNotice
 
 @app.on_event("startup")
 def on_startup():
+    configure_root_logging()
+    log.info("web startup: initializing database")
     init_db()
 
     with SessionLocal() as db:
-        created = seed_targets(db)
+        seed_targets(db)
 
         # Ensure a banner row exists (id=1)
         exists = db.query(SiteNotice).filter(SiteNotice.id == 1).first()
@@ -45,6 +68,9 @@ def on_startup():
                 )
             )
             db.commit()
+            log.debug("web startup: created default site notice")
+
+    log.info("web startup complete", extra={"env": ENVIRONMENT})
 
 
 @app.get("/health")
