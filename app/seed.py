@@ -1,5 +1,8 @@
 from sqlalchemy.orm import Session
 from app.models import ApiTarget
+from app.logger import get_logger
+
+log = get_logger(__name__)
 
 DEFAULT_TARGETS = [
     {
@@ -81,5 +84,6 @@ def seed_targets(db: Session) -> int:
 
     if created:
         db.commit()
+        log.info("seed_targets: created targets", extra={"created": created})
 
     return created

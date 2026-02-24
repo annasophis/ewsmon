@@ -11,8 +11,11 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, init_db
+from app.logger import configure_root_logging, get_logger
 from app.models import ApiTarget, ApiProbe
 import app.settings as settings
+
+log = get_logger(__name__)
 
 
 def _today_yyyy_mm_dd_utc() -> str:
@@ -679,6 +682,7 @@ def cleanup_old_probes(db: Session, days: int) -> int:
 
 
 async def main():
+    configure_root_logging()
     init_db()
 
     # Support both names (your settings.py currently defines WORKER_INTERVAL_SECONDS)
@@ -690,7 +694,10 @@ async def main():
     timeout = httpx.Timeout(timeout_seconds)
     last_cleanup = 0.0
 
-    print(f"[worker] started. interval={interval}s timeout={timeout_seconds}s")
+    log.info(
+        "worker started",
+        extra={"interval_seconds": interval, "timeout_seconds": timeout_seconds},
+    )
 
     async with httpx.AsyncClient(http2=False, timeout=timeout) as client:
         while True:
@@ -699,7 +706,7 @@ async def main():
                 targets = db.scalars(select(ApiTarget).where(ApiTarget.enabled == True)).all()
 
             if not targets:
-                print("[worker] no enabled targets")
+                log.warning("no enabled targets")
             else:
                 tasks = [probe_one(client, t) for t in targets]
                 probes = await asyncio.gather(*tasks)
@@ -712,11 +719,17 @@ async def main():
                     now = time.time()
                     if now - last_cleanup >= cleanup_every:
                         deleted = cleanup_old_probes(db, retention_days)
-                        print(f"[worker] cleanup: deleted {deleted} probes older than {retention_days}d")
+                        log.info(
+                            "cleanup: deleted old probes",
+                            extra={"deleted": deleted, "retention_days": retention_days},
+                        )
                         last_cleanup = now
 
                 ok_count = sum(1 for _, r in results if r.get("ok"))
-                print(f"[worker] probed {inserted} targets ({ok_count} ok)")
+                log.info(
+                    "probe cycle completed",
+                    extra={"targets": inserted, "ok": ok_count},
+                )
 
             await asyncio.sleep(interval)
 

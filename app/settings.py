@@ -38,6 +38,11 @@ PUROLATOR_SHIPTRACK_ID = os.getenv("PUROLATOR_SHIPTRACK_ID", "520111990344")
 PUROLATOR_SHIPTRACK_ID_UAT = os.getenv("PUROLATOR_SHIPTRACK_ID_UAT", PUROLATOR_SHIPTRACK_ID)
 
 # ----------------------------
+# Logging
+# ----------------------------
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+# ----------------------------
 # Alerts (future)
 # ----------------------------
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "")
