@@ -48,6 +48,13 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+/** Strip "Purolator " prefix for display on dashboard */
+function displayName(name) {
+  if (name == null || name === "") return "—";
+  const s = String(name).trim();
+  return s.replace(/^Purolator\s+/i, "").trim() || s;
+}
+
 function rowHtml(item){
   // Be defensive: your API might name things slightly differently.
   const id = pick(item, ["id", "target_id", "targetId", "service_id"]);
@@ -63,10 +70,16 @@ function rowHtml(item){
 
   const slowClass = (Number(lastMs) >= 1500) ? "slow" : "";
   const canView = id !== undefined && id !== null && String(id).length > 0;
+  const display = displayName(name);
 
   return `
     <tr>
-      <td>${escapeHtml(name)}</td>
+      <td>
+        ${canView
+          ? `<button type="button" class="link-like js-open-chart" data-target-id="${escapeHtml(String(id))}" data-target-name="${escapeHtml(String(name))}">${escapeHtml(display)}</button>`
+          : escapeHtml(display)
+        }
+      </td>
       <td>${statusBadge(isUp)}</td>
       <td class="muted">${escapeHtml(fmtTime(lastChecked))}</td>
       <td class="num ${slowClass}">${escapeHtml(fmtMs(lastMs))}</td>
@@ -103,7 +116,7 @@ function computeTopStats(items){
     const ms = Number(pick(it, ["last_ms","duration_ms","ms"]));
     if (!Number.isNaN(ms)){
       if (!slowest || ms > slowest.ms){
-        slowest = { name: pick(it, ["name","service","service_name"]) ?? "—", ms };
+        slowest = { name: displayName(pick(it, ["name","service","service_name"]) ?? "—"), ms };
       }
     }
   }
@@ -300,5 +313,171 @@ setInterval(load, REFRESH_MS);
 
     if (!targetId) return;
     showNotesForTarget(targetId, targetName);
+  });
+})();
+
+// -------------------- Chart Modal (probe history) --------------------
+(function () {
+  const BUCKET_MINUTES = 5;
+  const PROBES_LIMIT = 300;
+
+  const modal = document.getElementById("chartModal");
+  const backdrop = document.getElementById("chartModalBackdrop");
+  const titleEl = document.getElementById("chartModalTitle");
+  const subtitleEl = document.getElementById("chartModalSubtitle");
+  const stateEl = document.getElementById("chartModalState");
+  const summaryEl = document.getElementById("chartSummary");
+  const canvas = document.getElementById("chartCanvas");
+  const closeBtn = document.getElementById("chartModalClose");
+  const closeBtn2 = document.getElementById("chartModalClose2");
+
+  if (!modal || !canvas) return;
+
+  let chartInstance = null;
+
+  function openChartModal() {
+    modal.classList.remove("hidden");
+    backdrop.classList.remove("hidden");
+    document.addEventListener("keydown", onEsc);
+  }
+
+  function closeChartModal() {
+    modal.classList.add("hidden");
+    backdrop.classList.add("hidden");
+    document.removeEventListener("keydown", onEsc);
+    if (chartInstance) {
+      chartInstance.destroy();
+      chartInstance = null;
+    }
+  }
+
+  function onEsc(e) {
+    if (e.key === "Escape") closeChartModal();
+  }
+
+  /** Bucket probes into BUCKET_MINUTES intervals; return { labels, avgMs, successPct } */
+  function bucketProbes(probes) {
+    if (!probes || probes.length === 0) return { labels: [], avgMs: [], successPct: [] };
+
+    const bucketMs = BUCKET_MINUTES * 60 * 1000;
+    const byBucket = new Map(); // bucketStartTs -> { sumMs, count, okCount }
+
+    for (const p of probes) {
+      const ts = new Date(p.ts).getTime();
+      const bucketStart = Math.floor(ts / bucketMs) * bucketMs;
+      if (!byBucket.has(bucketStart)) byBucket.set(bucketStart, { sumMs: 0, count: 0, okCount: 0 });
+      const b = byBucket.get(bucketStart);
+      b.count += 1;
+      if (p.ok) b.okCount += 1;
+      const ms = p.duration_ms != null ? Number(p.duration_ms) : 0;
+      b.sumMs += ms;
+    }
+
+    const sorted = [...byBucket.entries()].sort((a, b) => a[0] - b[0]);
+    const labels = sorted.map(([ts]) => {
+      const d = new Date(ts);
+      return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    });
+    const avgMs = sorted.map(([, b]) => (b.count ? b.sumMs / b.count : null));
+    const successPct = sorted.map(([, b]) => (b.count ? (b.okCount / b.count) * 100 : null));
+
+    return { labels, avgMs, successPct };
+  }
+
+  function renderChart(labels, avgMs) {
+    if (chartInstance) chartInstance.destroy();
+
+    const ctx = canvas.getContext("2d");
+    chartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: `Avg response time (${BUCKET_MINUTES} min buckets)`,
+          data: avgMs,
+          borderColor: "rgb(124, 156, 255)",
+          backgroundColor: "rgba(124, 156, 255, 0.1)",
+          fill: true,
+          tension: 0.2,
+          spanGaps: true,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2.2,
+        plugins: {
+          legend: { display: true },
+        },
+        scales: {
+          x: {
+            grid: { color: "rgba(255,255,255,0.06)" },
+            ticks: { color: "#a9b2d6", maxTicksLimit: 12 },
+          },
+          y: {
+            title: { display: true, text: "ms", color: "#a9b2d6" },
+            grid: { color: "rgba(255,255,255,0.06)" },
+            ticks: { color: "#a9b2d6" },
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+  }
+
+  function setSummary(probes) {
+    if (!probes || probes.length === 0) {
+      summaryEl.textContent = "No probe data in this range.";
+      return;
+    }
+    const withMs = probes.filter(p => p.duration_ms != null);
+    const okCount = probes.filter(p => p.ok).length;
+    const avg = withMs.length ? withMs.reduce((s, p) => s + p.duration_ms, 0) / withMs.length : 0;
+    const sorted = [...withMs].sort((a, b) => a.duration_ms - b.duration_ms);
+    const p95 = sorted.length ? sorted[Math.floor(sorted.length * 0.95)]?.duration_ms : null;
+    summaryEl.textContent = `Probes: ${probes.length} • Success: ${okCount}/${probes.length} (${((okCount / probes.length) * 100).toFixed(1)}%) • Avg: ${avg.toFixed(0)} ms${p95 != null ? ` • P95: ${p95.toFixed(0)} ms` : ""}`;
+  }
+
+  async function showChartForTarget(targetId, targetName) {
+    const display = displayName(targetName || "");
+    titleEl.textContent = "Probe history";
+    subtitleEl.textContent = display ? `${display} (id: ${targetId})` : `Target id: ${targetId}`;
+    stateEl.textContent = "Loading…";
+    summaryEl.textContent = "";
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+    openChartModal();
+
+    try {
+      const res = await fetch(`/api/targets/${encodeURIComponent(targetId)}/probes?limit=${PROBES_LIMIT}`);
+      if (!res.ok) throw new Error(`Probes ${res.status}`);
+      const data = await res.json();
+      const probes = data.probes || [];
+      stateEl.textContent = "";
+
+      const { labels, avgMs } = bucketProbes(probes);
+      if (labels.length) {
+        renderChart(labels, avgMs);
+      } else {
+        stateEl.textContent = "No probe data yet for this endpoint.";
+      }
+      setSummary(probes);
+    } catch (err) {
+      console.error(err);
+      stateEl.textContent = "Could not load probes. Check console.";
+    }
+  }
+
+  backdrop.addEventListener("click", closeChartModal);
+  closeBtn.addEventListener("click", closeChartModal);
+  closeBtn2.addEventListener("click", closeChartModal);
+
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".js-open-chart");
+    if (!btn) return;
+    e.preventDefault();
+    const targetId = btn.getAttribute("data-target-id");
+    const targetName = btn.getAttribute("data-target-name") || "";
+    if (!targetId) return;
+    showChartForTarget(targetId, targetName);
   });
 })();

@@ -6,7 +6,7 @@
   <title>EWS Monitoring</title>
 
   <!-- cache-bust to avoid stale CSS/JS while iterating -->
-  <link rel="stylesheet" href="/static/style.css?v=3" />
+  <link rel="stylesheet" href="/static/style.css?v=4" />
 </head>
 <body>
   <header class="topbar">
@@ -98,6 +98,30 @@
       </footer>
   </main>
 
+  <!-- Chart modal: probe history over time -->
+  <div id="chartModalBackdrop" class="modal-backdrop hidden"></div>
+  <div id="chartModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="chartModalTitle">
+    <div class="modal-card modal-card-wide">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="chartModalTitle">Probe history</div>
+          <div class="modal-subtitle" id="chartModalSubtitle"></div>
+        </div>
+        <button type="button" class="modal-close" id="chartModalClose" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="chartModalState" class="modal-state"></div>
+        <div class="chart-wrap">
+          <canvas id="chartCanvas" width="800" height="320"></canvas>
+        </div>
+        <div id="chartSummary" class="chart-summary"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="chartModalClose2">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ✅ Notes Modal (paste once) -->
   <div id="notesModalBackdrop" class="modal-backdrop hidden"></div>
 
@@ -123,7 +147,8 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <!-- cache-bust while iterating -->
-  <script src="/static/app.js?v=2"></script>
+  <script src="/static/app.js?v=3"></script>
 </body>
 </html>

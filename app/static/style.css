@@ -113,6 +113,22 @@
   .table th{ font-size:12px; color:var(--muted); font-weight:700; }
   .table td{ font-size:13px; }
   .table td.num, .table th.num{ text-align:right; }
+
+/* Clickable service name (opens chart) */
+.link-like {
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  text-decoration: none;
+}
+.link-like:hover {
+  color: #7c9cff;
+  text-decoration: underline;
+}
   
   .badge{
     display:inline-flex;
@@ -289,6 +305,41 @@
   width: min(900px, 96vw) !important;
   max-height: 85vh !important;
   overflow: hidden !important;
+}
+
+/* Chart modal */
+#chartModalBackdrop.hidden,
+#chartModal.hidden {
+  display: none !important;
+}
+#chartModalBackdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(0,0,0,0.55) !important;
+  z-index: 9999 !important;
+}
+#chartModal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10000 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 24px !important;
+}
+#chartModal .modal-card-wide {
+  width: min(920px, 96vw) !important;
+  max-height: 85vh !important;
+  overflow: hidden !important;
+}
+.chart-wrap {
+  min-height: 280px;
+  position: relative;
+  margin: 8px 0;
+}
+.chart-summary {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 12px;
 }
 
 .footer {
