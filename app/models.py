@@ -80,3 +80,14 @@ class ApiNote(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     target: Mapped["ApiTarget"] = relationship()
+
+
+class IncidentUpdate(Base):
+    __tablename__ = "incident_update"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)  # investigating|identified|monitoring|resolved|maintenance
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

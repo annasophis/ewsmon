@@ -166,6 +166,7 @@
       color: #ff8a94;
     }
     .btn-danger:hover { background: rgba(255,77,94,.3); }
+    .btn-sm { padding: 6px 10px; font-size: 0.75rem; }
 
     /* Pills */
     .pill {
@@ -338,6 +339,45 @@
         </div>
       </section>
     </div>
+
+    <section class="card" style="margin-top: var(--space-lg);">
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">Incident Updates</h2>
+          <p class="card-desc">Create manual incident updates shown on the public dashboard. In non-dev, set ADMIN_TOKEN and use the same value as x-admin-key (or send X-Admin-Token).</p>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label for="incidentStatus">Status</label>
+          <select id="incidentStatus">
+            <option value="investigating">investigating</option>
+            <option value="identified">identified</option>
+            <option value="monitoring">monitoring</option>
+            <option value="maintenance">maintenance</option>
+            <option value="resolved">resolved</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="incidentTitle">Title</label>
+          <input id="incidentTitle" type="text" placeholder="e.g. Degraded EWS response times" />
+        </div>
+        <div class="form-group">
+          <label for="incidentMessage">Message</label>
+          <textarea id="incidentMessage" placeholder="Describe the incident and any mitigation steps. Line breaks are preserved." rows="3"></textarea>
+        </div>
+        <div class="btn-group">
+          <button id="incidentSubmitBtn" class="btn btn-primary">Create incident update</button>
+          <button id="incidentReloadBtn" class="btn btn-secondary" type="button">Reload list</button>
+        </div>
+        <div class="preview-box" style="margin-top: var(--space-md);">
+          <div class="preview-label">Recent incidents (Resolve marks as resolved and hides from current banner)</div>
+          <div id="incidentList" class="table-wrap">
+            <span class="notes-empty">Click Reload list to load.</span>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -347,6 +387,9 @@
       BANNER_PUT: "/api/admin/notices/banner",
       NOTE_ADD_POST: (id) => `/api/admin/targets/${encodeURIComponent(id)}/notes`,
       NOTES_GET: (id) => `/api/targets/${encodeURIComponent(id)}/notes`,
+      INCIDENTS_GET: "/api/incidents",
+      INCIDENTS_POST: "/api/incidents",
+      INCIDENT_RESOLVE: (id) => `/api/incidents/${encodeURIComponent(id)}/resolve`,
     };
 
     function $(id){ return document.getElementById(id); }
@@ -378,6 +421,14 @@
       const key = getAdminKey();
       return {
         "x-admin-key": key,
+        ...extra
+      };
+    }
+    function incidentHeaders(extra={}){
+      const key = getAdminKey();
+      return {
+        "Content-Type": "application/json",
+        "x-admin-token": key,
         ...extra
       };
     }
@@ -517,6 +568,64 @@
       container.innerHTML = `<table class="admin-table"><thead><tr><th>Title</th><th>Body</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
+    // ---------- Incident Updates ----------
+    async function loadIncidentList(){
+      const container = $("incidentList");
+      try {
+        const data = await fetchJson(API.INCIDENTS_GET + "?limit=20");
+        const items = data.items || [];
+        if (!items.length){
+          container.innerHTML = "<span class=\"notes-empty\">No incidents yet.</span>";
+          return;
+        }
+        const rows = items.map(it => {
+          const id = it.id;
+          const title = escapeHtml(it.title ?? "");
+          const msg = escapeHtml((it.message ?? "").replace(/\n/g, " ")).slice(0, 80) + ((it.message || "").length > 80 ? "…" : "");
+          const date = it.created_at ? new Date(it.created_at).toLocaleString() : "";
+          const status = escapeHtml(it.status || "");
+          const active = it.is_active ? "<span class=\"pill bad\">Active</span>" : "<span class=\"pill ok\">Resolved</span>";
+          const resolveBtn = it.is_active ? `<button type="button" class="btn btn-secondary btn-sm js-resolve-incident" data-id="${id}">Resolve</button>` : "";
+          return `<tr><td class="cell-title">${title}</td><td class="cell-body">${msg}</td><td>${status}</td><td>${active}</td><td class="cell-date">${escapeHtml(date)}</td><td>${resolveBtn}</td></tr>`;
+        }).join("");
+        container.innerHTML = `<table class="admin-table"><thead><tr><th>Title</th><th>Message</th><th>Status</th><th>State</th><th>Date</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+        container.querySelectorAll(".js-resolve-incident").forEach(btn => {
+          btn.addEventListener("click", () => resolveIncident(Number(btn.getAttribute("data-id"))));
+        });
+      } catch (e) {
+        container.innerHTML = "<span class=\"notes-empty\">Failed to load: " + escapeHtml(e.message) + "</span>";
+      }
+    }
+
+    async function createIncident(){
+      const status = $("incidentStatus").value.trim();
+      const title = $("incidentTitle").value.trim();
+      const message = $("incidentMessage").value.trim();
+      if (!title || !message){
+        alert("Title and message are required.");
+        return;
+      }
+      await fetchJson(API.INCIDENTS_POST, {
+        method: "POST",
+        headers: incidentHeaders(),
+        body: JSON.stringify({ status, title, message, is_active: true })
+      });
+      $("incidentTitle").value = "";
+      $("incidentMessage").value = "";
+      alert("Incident update created ✅");
+      await loadIncidentList();
+    }
+
+    async function resolveIncident(id){
+      if (!confirm("Mark this incident as resolved? It will be hidden from the current banner.")) return;
+      await fetchJson(API.INCIDENT_RESOLVE(id), {
+        method: "POST",
+        headers: incidentHeaders()
+      });
+      alert("Incident resolved ✅");
+      await loadIncidentList();
+    }
+
     // ---------- Wire up ----------
     $("saveKeyBtn").addEventListener("click", () => {
       setAdminKey($("adminKey").value.trim());
@@ -536,6 +645,9 @@
     $("saveBannerBtn").addEventListener("click", () => saveBanner(null).catch(e => alert(e.message)));
     $("disableBannerBtn").addEventListener("click", () => saveBanner(false).catch(e => alert(e.message)));
 
+    $("incidentSubmitBtn").addEventListener("click", () => createIncident().catch(e => alert(e.message)));
+    $("incidentReloadBtn").addEventListener("click", () => loadIncidentList().catch(e => alert(e.message)));
+
     // ---------- Init ----------
     (async function init(){
       $("adminKey").value = getAdminKey();
@@ -545,6 +657,9 @@
 
       try { await loadBanner(); }
       catch(e){ console.error(e); alert("Failed to load banner: " + e.message); }
+
+      try { await loadIncidentList(); }
+      catch(e){ console.error(e); }
     })();
   </script>
 </body>

@@ -32,6 +32,22 @@
   <!-- ✅ Banner MUST be outside the header (topbar is usually a flex row) -->
   <div id="banner" class="banner" style="display:none"></div>
 
+  <!-- Incident Updates: banner + timeline (hidden when no active incident) -->
+  <div id="incidentSection" class="incident-section" style="display:none">
+    <div id="incidentBanner" class="incident-banner card">
+      <div class="incident-banner-inner">
+        <div class="incident-status-label" id="incidentStatusLabel"></div>
+        <div class="incident-title" id="incidentTitle"></div>
+        <div class="incident-message" id="incidentMessage"></div>
+        <div class="incident-updated muted" id="incidentUpdated"></div>
+      </div>
+    </div>
+    <div class="incident-timeline-wrap">
+      <button type="button" class="incident-toggle btn btn-secondary" id="incidentToggle" aria-expanded="false">View updates</button>
+      <div id="incidentTimeline" class="incident-timeline hidden"></div>
+    </div>
+  </div>
+
   <main class="wrap">
     <section class="cards">
       <div class="card">

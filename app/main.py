@@ -16,7 +16,7 @@ from app.settings import ENVIRONMENT
 
 from fastapi import Request, HTTPException
 from pydantic import BaseModel
-from app.models import SiteNotice, ApiNote
+from app.models import SiteNotice, ApiNote, IncidentUpdate
 
 log = get_logger(__name__)
 
@@ -69,6 +69,20 @@ def on_startup():
             )
             db.commit()
             log.debug("web startup: created default site notice")
+
+        # Dev-only: sample maintenance incident if none exist
+        if ENVIRONMENT == "dev":
+            if db.query(IncidentUpdate).first() is None:
+                db.add(
+                    IncidentUpdate(
+                        is_active=True,
+                        status="maintenance",
+                        title="Scheduled maintenance window",
+                        message="Example incident. EWS APIs may be briefly unavailable during the maintenance window.",
+                    )
+                )
+                db.commit()
+                log.debug("web startup: created sample dev incident")
 
     log.info("web startup complete", extra={"env": ENVIRONMENT})
 
@@ -283,12 +297,22 @@ def api_notices(db: Session = Depends(get_db)):
     }
 
 from fastapi import HTTPException, Request
-from app.settings import ADMIN_KEY
+from app.settings import ADMIN_KEY, ADMIN_TOKEN, ENVIRONMENT
 
 def require_admin(request: Request):
     if not ADMIN_KEY:
         raise HTTPException(500, "ADMIN_KEY not set")
     if request.headers.get("x-admin-key") != ADMIN_KEY:
+        raise HTTPException(401, "Unauthorized")
+
+
+def require_incident_admin(request: Request):
+    """When ENVIRONMENT != 'dev', require X-Admin-Token header."""
+    if ENVIRONMENT == "dev":
+        return
+    if not ADMIN_TOKEN:
+        raise HTTPException(500, "ADMIN_TOKEN not set for non-dev")
+    if request.headers.get("x-admin-token") != ADMIN_TOKEN:
         raise HTTPException(401, "Unauthorized")
     
 
@@ -361,4 +385,100 @@ def create_note(
     db.add(note)
     db.commit()
 
+    return {"ok": True}
+
+
+# -----------------------------
+# Incident Updates API (public GET; POST protected when ENVIRONMENT != "dev")
+# -----------------------------
+
+VALID_INCIDENT_STATUSES = {"investigating", "identified", "monitoring", "resolved", "maintenance"}
+
+
+@app.get("/api/incidents/current")
+def api_incidents_current(db: Session = Depends(get_db)):
+    row = (
+        db.query(IncidentUpdate)
+        .filter(IncidentUpdate.is_active == True)
+        .order_by(IncidentUpdate.created_at.desc())
+        .limit(1)
+        .first()
+    )
+    if not row:
+        return {"active": False}
+    return {
+        "active": True,
+        "id": row.id,
+        "status": row.status,
+        "title": row.title,
+        "message": row.message,
+        "created_at": row.created_at.isoformat(),
+    }
+
+
+@app.get("/api/incidents")
+def api_incidents_list(limit: int = 20, db: Session = Depends(get_db)):
+    limit = max(1, min(limit, 100))
+    rows = (
+        db.query(IncidentUpdate)
+        .order_by(IncidentUpdate.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "is_active": r.is_active,
+                "status": r.status,
+                "title": r.title,
+                "message": r.message,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in rows
+        ]
+    }
+
+
+class IncidentCreate(BaseModel):
+    status: str
+    title: str
+    message: str
+    is_active: bool | None = True
+
+
+@app.post("/api/incidents")
+def api_incidents_create(
+    payload: IncidentCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_incident_admin(request)
+    if payload.status not in VALID_INCIDENT_STATUSES:
+        raise HTTPException(400, f"status must be one of: {sorted(VALID_INCIDENT_STATUSES)}")
+    row = IncidentUpdate(
+        is_active=payload.is_active if payload.is_active is not None else True,
+        status=payload.status,
+        title=payload.title.strip(),
+        message=payload.message.strip(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"ok": True, "id": row.id}
+
+
+@app.post("/api/incidents/{incident_id}/resolve")
+def api_incidents_resolve(
+    incident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_incident_admin(request)
+    row = db.query(IncidentUpdate).filter(IncidentUpdate.id == incident_id).first()
+    if not row:
+        raise HTTPException(404, "Incident not found")
+    row.is_active = False
+    row.status = "resolved"
+    db.commit()
     return {"ok": True}

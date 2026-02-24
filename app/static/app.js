@@ -1,5 +1,7 @@
 const REFRESH_MS = 10_000;
 const STORAGE_KEY_FILTER = "ewsmon_env_filter";
+const STORAGE_KEY_INCIDENT_TIMELINE_OPEN = "ewsmon_incident_timeline_open";
+const INCIDENT_MSG_TRUNCATE = 120;
 
 /** Infer environment: "uat" if name contains "(UAT)" or url contains "certwebservices", else "prod" */
 function inferEnv(item) {
@@ -214,6 +216,7 @@ async function load(){
     applyFilter();
     lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
 
+    await loadIncidentCurrent();
   } catch (e){
     rowsEl.innerHTML = `<tr><td colspan="10" class="muted">Error loading data: ${escapeHtml(String(e.message || e))}</td></tr>`;
     lastUpdatedEl.textContent = `Last updated: (error)`;
@@ -241,6 +244,87 @@ document.querySelectorAll(".segmented .segment").forEach((btn) => {
     btn.setAttribute("aria-pressed", isActive ? "true" : "false");
   });
 })();
+
+// -------------------- Incident Updates --------------------
+function getIncidentTimelineOpen() {
+  try {
+    return localStorage.getItem(STORAGE_KEY_INCIDENT_TIMELINE_OPEN) === "true";
+  } catch (_) {}
+  return false;
+}
+function setIncidentTimelineOpen(open) {
+  try {
+    localStorage.setItem(STORAGE_KEY_INCIDENT_TIMELINE_OPEN, open ? "true" : "false");
+  } catch (_) {}
+}
+
+async function loadIncidentCurrent() {
+  const section = document.getElementById("incidentSection");
+  const banner = document.getElementById("incidentBanner");
+  if (!section || !banner) return;
+  try {
+    const data = await fetchJson("/api/incidents/current");
+    if (!data.active) {
+      section.style.display = "none";
+      return;
+    }
+    section.style.display = "block";
+    banner.className = "incident-banner card " + (data.status || "investigating");
+    document.getElementById("incidentStatusLabel").textContent = (data.status || "").replace(/_/g, " ");
+    document.getElementById("incidentTitle").textContent = data.title || "";
+    document.getElementById("incidentMessage").textContent = data.message || "";
+    document.getElementById("incidentUpdated").textContent = "Last updated: " + fmtTime(data.created_at);
+
+    const toggle = document.getElementById("incidentToggle");
+    const timelineEl = document.getElementById("incidentTimeline");
+    const isOpen = getIncidentTimelineOpen();
+    toggle.textContent = isOpen ? "Hide updates" : "View updates";
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    timelineEl.classList.toggle("hidden", !isOpen);
+    if (isOpen && timelineEl.children.length === 0) loadIncidentTimeline();
+  } catch (_) {
+    section.style.display = "none";
+  }
+}
+
+async function loadIncidentTimeline() {
+  const timelineEl = document.getElementById("incidentTimeline");
+  if (!timelineEl) return;
+  try {
+    const data = await fetchJson("/api/incidents?limit=20");
+    const items = data.items || [];
+    const html = items.map((it) => {
+      const ts = escapeHtml(fmtTime(it.created_at));
+      const status = (it.status || "").toLowerCase();
+      const msg = (it.message || "").trim();
+      const truncated = msg.length > INCIDENT_MSG_TRUNCATE;
+      const displayMsg = truncated ? msg.slice(0, INCIDENT_MSG_TRUNCATE) + "…" : msg;
+      const msgClass = truncated ? "incident-msg truncated" : "incident-msg";
+      const fullHtml = escapeHtml(msg).replace(/\n/g, "<br>");
+      const dataFull = fullHtml.replace(/"/g, "&quot;");
+      return `<li><span class="incident-ts">${ts}</span><span class="incident-pill ${escapeHtml(status)}">${escapeHtml(status)}</span><div class="${msgClass}" data-full="${dataFull}" title="${truncated ? "Click to expand" : ""}">${escapeHtml(displayMsg)}</div></li>`;
+    }).join("");
+    timelineEl.innerHTML = html || "<li class=\"muted\">No updates yet.</li>";
+    timelineEl.querySelectorAll(".incident-msg.truncated").forEach((el) => {
+      el.addEventListener("click", () => {
+        const full = el.getAttribute("data-full");
+        if (full) { el.innerHTML = full; el.classList.remove("truncated"); el.removeAttribute("data-full"); }
+      });
+    });
+  } catch (_) {
+    timelineEl.innerHTML = "<li class=\"muted\">Could not load updates.</li>";
+  }
+}
+
+document.getElementById("incidentToggle")?.addEventListener("click", () => {
+  const toggle = document.getElementById("incidentToggle");
+  const timelineEl = document.getElementById("incidentTimeline");
+  const isOpen = timelineEl.classList.toggle("hidden") === false;
+  setIncidentTimelineOpen(isOpen);
+  toggle.textContent = isOpen ? "Hide updates" : "View updates";
+  toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  if (isOpen) loadIncidentTimeline();
+});
 
 load();
 setInterval(load, REFRESH_MS);
