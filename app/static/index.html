@@ -19,6 +19,11 @@
     </div>
 
     <div class="controls">
+      <div class="segmented" role="group" aria-label="Filter by environment">
+        <button type="button" class="segment segment--active" data-filter="all" aria-pressed="true">All</button>
+        <button type="button" class="segment" data-filter="prod" aria-pressed="false">Prod</button>
+        <button type="button" class="segment" data-filter="uat" aria-pressed="false">UAT</button>
+      </div>
       <div class="pill" id="lastUpdated">Last updated: —</div>
       <button class="btn" id="refreshBtn">Refresh</button>
     </div>

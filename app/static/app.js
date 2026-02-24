@@ -1,4 +1,32 @@
 const REFRESH_MS = 10_000;
+const STORAGE_KEY_FILTER = "ewsmon_env_filter";
+
+/** Infer environment: "uat" if name contains "(UAT)" or url contains "certwebservices", else "prod" */
+function inferEnv(item) {
+  const name = (pick(item, ["name", "service_name"]) ?? "").toString();
+  const url = (pick(item, ["url"]) ?? "").toString();
+  if (/\(UAT\)/i.test(name) || /certwebservices/i.test(url)) return "uat";
+  return "prod";
+}
+
+function filterByEnv(items, env) {
+  if (!env || env === "all") return items;
+  return items.filter((it) => inferEnv(it) === env);
+}
+
+function getStoredFilter() {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY_FILTER);
+    if (v === "prod" || v === "uat" || v === "all") return v;
+  } catch (_) {}
+  return "all";
+}
+
+function setStoredFilter(env) {
+  try {
+    localStorage.setItem(STORAGE_KEY_FILTER, env);
+  } catch (_) {}
+}
 
 function fmtMs(v){
   if (v === null || v === undefined) return "—";
@@ -130,22 +158,47 @@ async function fetchJson(url){
   return await r.json();
 }
 
+let lastFetchedItems = [];
+
+function applyFilter() {
+  const rowsEl = document.getElementById("rows");
+  const filter = getStoredFilter();
+  const filtered = filterByEnv(lastFetchedItems, filter);
+
+  if (!filtered.length) {
+    rowsEl.innerHTML = `<tr><td colspan="10" class="muted">No ${filter === "all" ? "data" : filter.toUpperCase() + " endpoints"} to show.</td></tr>`;
+  } else {
+    rowsEl.innerHTML = filtered.map(rowHtml).join("");
+  }
+
+  const { svcCount, upCount, downCount, slowest } = computeTopStats(filtered);
+  document.getElementById("svcCount").textContent = String(svcCount);
+  document.getElementById("upCount").textContent = String(upCount);
+  document.getElementById("downCount").textContent = String(downCount);
+  document.getElementById("slowest").textContent =
+    slowest ? `${slowest.name} • ${slowest.ms.toFixed(0)} ms` : "—";
+
+  // Update segment active state
+  document.querySelectorAll(".segmented .segment").forEach((btn) => {
+    const isActive = btn.getAttribute("data-filter") === filter;
+    btn.classList.toggle("segment--active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+}
+
 async function load(){
   const rowsEl = document.getElementById("rows");
   const lastUpdatedEl = document.getElementById("lastUpdated");
   const bannerEl = document.getElementById("banner");
 
   try{
-    // Fetch summary + banner at same time
     const [data, notices] = await Promise.all([
       fetchJson("/api/summary"),
       fetchJson("/api/notices").catch(() => null)
     ]);
 
-    // ---------- BANNER ----------
     if (bannerEl){
       const b = notices?.banner;
-
       if (b && b.enabled){
         bannerEl.style.display = "block";
         bannerEl.className = `banner ${b.type || "info"}`;
@@ -156,24 +209,9 @@ async function load(){
         bannerEl.className = "banner";
       }
     }
-    // ---------- END BANNER ----------
 
-    // existing summary logic
-    const items = Array.isArray(data) ? data : (data.items ?? []);
-
-    if (!items.length){
-      rowsEl.innerHTML = `<tr><td colspan="10" class="muted">No data yet… (worker just started)</td></tr>`;
-    } else {
-      rowsEl.innerHTML = items.map(rowHtml).join("");
-    }
-
-    const { svcCount, upCount, downCount, slowest } = computeTopStats(items);
-    document.getElementById("svcCount").textContent = String(svcCount);
-    document.getElementById("upCount").textContent = String(upCount);
-    document.getElementById("downCount").textContent = String(downCount);
-    document.getElementById("slowest").textContent =
-      slowest ? `${slowest.name} • ${slowest.ms.toFixed(0)} ms` : "—";
-
+    lastFetchedItems = Array.isArray(data) ? data : (data.items ?? []);
+    applyFilter();
     lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
 
   } catch (e){
@@ -183,6 +221,27 @@ async function load(){
 }
 
 document.getElementById("refreshBtn").addEventListener("click", load);
+
+// Segmented filter: persist selection and re-apply
+document.querySelectorAll(".segmented .segment").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const filter = btn.getAttribute("data-filter");
+    if (!filter) return;
+    setStoredFilter(filter);
+    applyFilter();
+  });
+});
+
+// Restore segment active state from localStorage on first paint
+(function setInitialSegment() {
+  const filter = getStoredFilter();
+  document.querySelectorAll(".segmented .segment").forEach((btn) => {
+    const isActive = btn.getAttribute("data-filter") === filter;
+    btn.classList.toggle("segment--active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+})();
+
 load();
 setInterval(load, REFRESH_MS);
 

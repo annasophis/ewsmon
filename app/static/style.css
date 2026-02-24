@@ -43,6 +43,36 @@
   .subtitle{ font-size:12px; color:var(--muted); margin-top:2px; }
   
   .controls{ display:flex; gap:10px; align-items:center; }
+  .segmented{
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(25,34,72,.35);
+    padding: 2px;
+    gap: 0;
+  }
+  .segmented .segment{
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 999px;
+    transition: background .15s, color .15s;
+  }
+  .segmented .segment:first-child{ border-radius: 999px 0 0 999px; }
+  .segmented .segment:last-child{ border-radius: 0 999px 999px 0; }
+  .segmented .segment:hover{
+    color: var(--text);
+    background: rgba(25,34,72,.5);
+  }
+  .segmented .segment--active,
+  .segmented .segment[aria-pressed="true"]{
+    background: rgba(25,34,72,.85);
+    color: var(--text);
+  }
   .pill{
     padding:8px 10px;
     border:1px solid var(--line);
