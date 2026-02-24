@@ -14,184 +14,331 @@
       --ok: #31d07f;
       --bad: #ff4d5e;
       --warn: #ffcc66;
+      --accent: rgba(124,156,255,.5);
+      --space-xs: 6px;
+      --space-sm: 12px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      --radius: 12px;
+      --radius-sm: 8px;
     }
     * { box-sizing: border-box; }
     body {
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       margin: 0;
-      padding: 24px;
-      max-width: 980px;
       min-height: 100vh;
       background: linear-gradient(180deg, #070a14 0%, var(--bg) 100%);
       color: var(--text);
+      font-size: 15px;
+      line-height: 1.5;
     }
-    h1 { margin: 0 0 8px; font-size: 22px; font-weight: 700; }
-    .muted { color: var(--muted); font-size: 13px; }
-    .muted code { background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 6px; font-size: 12px; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    /* Dashboard layout */
+    .admin-header {
+      padding: var(--space-lg) var(--space-xl);
+      border-bottom: 1px solid var(--line);
+      background: rgba(7,10,20,.7);
+      backdrop-filter: blur(10px);
+    }
+    .admin-header h1 {
+      margin: 0 0 var(--space-xs);
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+    .admin-header .subtitle {
+      color: var(--muted);
+      font-size: 0.875rem;
+    }
+    .admin-header .subtitle code {
+      background: rgba(255,255,255,.08);
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+    }
+    .admin-wrap {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: var(--space-xl);
+    }
+
+    /* Card containers */
     .card {
       background: linear-gradient(180deg, rgba(17,24,51,.95) 0%, rgba(15,22,48,.85) 100%);
       border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 18px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: var(--space-lg);
     }
-    .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 700; }
-    label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
-    label:first-of-type { margin-top: 0; }
-    input[type="text"], input[type="password"], textarea, select {
+    .card:last-child { margin-bottom: 0; }
+    .card-header {
+      padding: var(--space-md) var(--space-lg);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-sm);
+    }
+    .card-title {
+      margin: 0;
+      font-size: 1.0625rem;
+      font-weight: 700;
+    }
+    .card-desc {
+      color: var(--muted);
+      font-size: 0.8125rem;
+      margin: 0;
       width: 100%;
-      padding: 10px 12px;
-      border-radius: 10px;
+    }
+    .card-body {
+      padding: var(--space-lg);
+    }
+    .card-body .form-group + .form-group { margin-top: var(--space-md); }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-lg);
+    }
+    @media (max-width: 720px) { .row { grid-template-columns: 1fr; } }
+
+    /* Form elements */
+    .form-group label {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: var(--space-xs);
+    }
+    .form-group input[type="checkbox"] {
+      margin-right: var(--space-sm);
+      vertical-align: middle;
+    }
+    .form-group input[type="text"],
+    .form-group input[type="password"],
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-sm);
       border: 1px solid var(--line);
       background: rgba(25,34,72,.4);
       color: var(--text);
-      font-size: 14px;
+      font-size: 0.9375rem;
     }
-    input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
-    input:focus, textarea:focus, select:focus {
+    .form-group input::placeholder,
+    .form-group textarea::placeholder { color: var(--muted); opacity: .8; }
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
       outline: none;
-      border-color: rgba(124,156,255,.5);
+      border-color: var(--accent);
       box-shadow: 0 0 0 2px rgba(124,156,255,.15);
     }
-    select { cursor: pointer; }
-    textarea { min-height: 90px; resize: vertical; }
-    .btns { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
-    button {
-      padding: 10px 14px;
-      border-radius: 10px;
+    .form-group select { cursor: pointer; }
+    .form-group textarea { min-height: 96px; resize: vertical; }
+
+    /* Buttons */
+    .btn-group { display: flex; gap: var(--space-sm); margin-top: var(--space-md); flex-wrap: wrap; }
+    .btn {
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-sm);
       border: 1px solid var(--line);
-      background: rgba(25,34,72,.7);
-      color: var(--text);
       font-weight: 600;
-      font-size: 13px;
+      font-size: 0.8125rem;
       cursor: pointer;
+      transition: background .15s;
     }
-    button:hover { background: rgba(25,34,72,.9); }
-    button.secondary { background: rgba(25,34,72,.4); }
-    button.danger { background: rgba(255,77,94,.25); border-color: var(--bad); color: #ff8a94; }
-    button.danger:hover { background: rgba(255,77,94,.35); }
+    .btn-primary {
+      background: rgba(25,34,72,.85);
+      color: var(--text);
+    }
+    .btn-primary:hover { background: rgba(25,34,72,.95); }
+    .btn-secondary {
+      background: rgba(25,34,72,.4);
+      color: var(--text);
+    }
+    .btn-secondary:hover { background: rgba(25,34,72,.6); }
+    .btn-danger {
+      background: rgba(255,77,94,.2);
+      border-color: var(--bad);
+      color: #ff8a94;
+    }
+    .btn-danger:hover { background: rgba(255,77,94,.3); }
+
+    /* Pills */
     .pill {
       display: inline-block;
       padding: 5px 12px;
       border-radius: 999px;
-      font-size: 12px;
+      font-size: 0.75rem;
       font-weight: 600;
       border: 1px solid var(--line);
       background: rgba(25,34,72,.35);
     }
     .pill.ok { background: rgba(49,208,127,.15); border-color: var(--ok); color: var(--ok); }
     .pill.bad { background: rgba(255,77,94,.15); border-color: var(--bad); color: var(--bad); }
-    /* Preview areas (no JSON) */
+
+    /* Preview areas */
     .preview-box {
-      margin-top: 14px;
-      padding: 12px 14px;
-      border-radius: 10px;
+      margin-top: var(--space-md);
+      padding: var(--space-md) var(--space-lg);
+      border-radius: var(--radius-sm);
       border: 1px solid var(--line);
       background: rgba(0,0,0,.2);
-      font-size: 13px;
-      color: var(--text);
     }
-    .preview-box .preview-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
-    .preview-box .banner-preview {
+    .preview-label {
+      font-size: 0.6875rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: var(--space-sm);
+    }
+    .banner-preview {
       white-space: pre-wrap;
       word-break: break-word;
       font-weight: 600;
+      font-size: 0.9375rem;
     }
-    .preview-box .banner-preview.empty { color: var(--muted); font-style: italic; font-weight: normal; }
-    .notes-list-preview { display: flex; flex-direction: column; gap: 10px; }
-    .notes-list-preview .note-item {
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      background: rgba(255,255,255,.03);
+    .banner-preview.empty { color: var(--muted); font-style: italic; font-weight: normal; }
+
+    /* Styled table (notes) */
+    .table-wrap { overflow-x: auto; margin-top: var(--space-sm); }
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
     }
-    .notes-list-preview .note-item .note-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
-    .notes-list-preview .note-item .note-body { font-size: 12px; color: var(--muted); white-space: pre-wrap; word-break: break-word; }
-    .notes-list-preview .empty { color: var(--muted); font-style: italic; font-size: 13px; }
-    @media (max-width: 720px) { .row { grid-template-columns: 1fr; } }
+    .admin-table th,
+    .admin-table td {
+      padding: var(--space-sm) var(--space-md);
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+    .admin-table th {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .admin-table tbody tr:last-child td { border-bottom: 0; }
+    .admin-table tbody tr:hover { background: rgba(255,255,255,.02); }
+    .admin-table .cell-title { font-weight: 600; color: var(--text); }
+    .admin-table .cell-body { color: var(--muted); word-break: break-word; max-width: 320px; }
+    .admin-table .cell-date { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .notes-empty { color: var(--muted); font-style: italic; font-size: 0.875rem; padding: var(--space-md); }
   </style>
 </head>
 
 <body>
-  <h1>EWS Monitoring — Admin</h1>
-  <div class="muted">Uses <code>x-admin-key</code> header. Key is stored only in this browser (localStorage).</div>
+  <header class="admin-header">
+    <h1>EWS Monitoring — Admin</h1>
+    <p class="subtitle">Uses <code>x-admin-key</code> header. Key is stored only in this browser (localStorage).</p>
+  </header>
 
-  <div class="card" style="margin-top:20px;">
-    <h2>Admin Key</h2>
-    <label for="adminKey">x-admin-key</label>
-    <input id="adminKey" type="password" placeholder="Paste ADMIN_KEY here" />
-    <div class="btns">
-      <button id="saveKeyBtn">Save key</button>
-      <button id="clearKeyBtn" class="secondary" type="button">Clear</button>
+  <main class="admin-wrap">
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">Admin Key</h2>
+      </div>
+      <div class="card-body">
+        <div class="form-group">
+          <label for="adminKey">x-admin-key</label>
+          <input id="adminKey" type="password" placeholder="Paste ADMIN_KEY here" />
+        </div>
+        <div class="btn-group">
+          <button id="saveKeyBtn" class="btn btn-primary">Save key</button>
+          <button id="clearKeyBtn" class="btn btn-secondary" type="button">Clear</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="row">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Banner</h2>
+            <p class="card-desc">Site-wide notice shown on the dashboard. Line breaks are preserved.</p>
+          </div>
+          <div id="bannerStatus" class="pill">Loading…</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="bannerEnabled" />
+              Enabled
+            </label>
+          </div>
+          <div class="form-group">
+            <label for="bannerType">Type</label>
+            <select id="bannerType">
+              <option value="info">info</option>
+              <option value="maintenance">maintenance</option>
+              <option value="warning">warning</option>
+              <option value="incident">incident</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="bannerMessage">Message</label>
+            <textarea id="bannerMessage" placeholder="Planned maintenance Sunday 2:00–3:00 AM ET"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="bannerStartsAt">Starts at (ISO, optional)</label>
+            <input id="bannerStartsAt" type="text" placeholder="2026-02-23T02:00:00-05:00">
+          </div>
+          <div class="form-group">
+            <label for="bannerEndsAt">Ends at (ISO, optional)</label>
+            <input id="bannerEndsAt" type="text" placeholder="2026-02-23T03:00:00-05:00">
+          </div>
+          <div class="btn-group">
+            <button id="saveBannerBtn" class="btn btn-primary">Save banner</button>
+            <button id="disableBannerBtn" class="btn btn-danger" type="button">Disable banner</button>
+            <button id="reloadBannerBtn" class="btn btn-secondary" type="button">Reload</button>
+          </div>
+          <div class="preview-box">
+            <div class="preview-label">Preview (as shown on dashboard)</div>
+            <div id="bannerPreview" class="banner-preview empty">No message yet.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Per-API Notes</h2>
+            <p class="card-desc">Pick a target, add a note, then preview in the table below.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label for="targetSelect">Target</label>
+            <select id="targetSelect"></select>
+          </div>
+          <div class="form-group">
+            <label for="noteTitle">Title</label>
+            <input id="noteTitle" type="text" placeholder="Maintenance window" />
+          </div>
+          <div class="form-group">
+            <label for="noteBody">Body</label>
+            <textarea id="noteBody" placeholder="Planned maintenance Sunday 2–3 AM ET. Some requests may time out."></textarea>
+          </div>
+          <div class="btn-group">
+            <button id="addNoteBtn" class="btn btn-primary">Add note</button>
+            <button id="previewNotesBtn" class="btn btn-secondary" type="button">Preview notes</button>
+            <button id="reloadTargetsBtn" class="btn btn-secondary" type="button">Reload targets</button>
+          </div>
+          <div class="preview-box">
+            <div class="preview-label">Notes for selected target</div>
+            <div id="notesPreview" class="table-wrap">
+              <span class="notes-empty">Select a target and click Preview notes.</span>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
-  </div>
-
-  <div class="row" style="margin-top:20px;">
-    <!-- Banner -->
-    <div class="card">
-      <h2>Banner</h2>
-      <div id="bannerStatus" class="pill">Loading…</div>
-
-      <label>
-        <input type="checkbox" id="bannerEnabled" />
-        Enabled
-      </label>
-
-      <label for="bannerType">Type</label>
-      <select id="bannerType">
-        <option value="info">info</option>
-        <option value="maintenance">maintenance</option>
-        <option value="warning">warning</option>
-        <option value="incident">incident</option>
-      </select>
-
-      <label for="bannerMessage">Message (line breaks are shown on the dashboard)</label>
-      <textarea id="bannerMessage" placeholder="Planned maintenance Sunday 2:00–3:00 AM ET"></textarea>
-
-      <label for="bannerStartsAt">Starts at (ISO, optional)</label>
-      <input id="bannerStartsAt" type="text" placeholder="2026-02-23T02:00:00-05:00">
-
-      <label for="bannerEndsAt">Ends at (ISO, optional)</label>
-      <input id="bannerEndsAt" type="text" placeholder="2026-02-23T03:00:00-05:00">
-
-      <div class="btns">
-        <button id="saveBannerBtn">Save banner</button>
-        <button id="disableBannerBtn" class="danger" type="button">Disable banner</button>
-        <button id="reloadBannerBtn" class="secondary" type="button">Reload</button>
-      </div>
-
-      <div class="preview-box">
-        <div class="preview-label">Preview (as shown on dashboard)</div>
-        <div id="bannerPreview" class="banner-preview empty">No message yet.</div>
-      </div>
-    </div>
-
-    <!-- Notes -->
-    <div class="card">
-      <h2>Per-API Notes</h2>
-      <div class="muted">Pick a target, add a note, then preview below.</div>
-
-      <label for="targetSelect">Target</label>
-      <select id="targetSelect"></select>
-
-      <label for="noteTitle">Title</label>
-      <input id="noteTitle" type="text" placeholder="Maintenance window" />
-
-      <label for="noteBody">Body</label>
-      <textarea id="noteBody" placeholder="Planned maintenance Sunday 2–3 AM ET. Some requests may time out."></textarea>
-
-      <div class="btns">
-        <button id="addNoteBtn">Add note</button>
-        <button id="previewNotesBtn" class="secondary" type="button">Preview notes</button>
-        <button id="reloadTargetsBtn" class="secondary" type="button">Reload targets</button>
-      </div>
-
-      <div class="preview-box">
-        <div class="preview-label">Notes for selected target</div>
-        <div id="notesPreview" class="notes-list-preview"><span class="empty">Select a target and click Preview notes.</span></div>
-      </div>
-    </div>
-  </div>
+  </main>
 
   <script>
     const API = {
@@ -352,21 +499,22 @@
       const container = $("notesPreview");
       const targetId = $("targetSelect").value;
       if (!targetId){
-        container.innerHTML = "<span class=\"empty\">Select a target and click Preview notes.</span>";
+        container.innerHTML = "<span class=\"notes-empty\">Select a target and click Preview notes.</span>";
         return;
       }
       const data = await fetchJson(API.NOTES_GET(targetId));
       const items = data?.items ?? (Array.isArray(data) ? data : []);
       if (!items.length){
-        container.innerHTML = "<span class=\"empty\">No notes for this target.</span>";
+        container.innerHTML = "<span class=\"notes-empty\">No notes for this target.</span>";
         return;
       }
-      container.innerHTML = items.map(n => {
+      const rows = items.map(n => {
         const title = escapeHtml(n.title ?? "");
-        const body = escapeHtml(n.body ?? n.note ?? "").replace(/\n/g, "<br>");
+        const body = escapeHtml(n.body ?? n.note ?? "").replace(/\n/g, " ");
         const date = n.created_at ? new Date(n.created_at).toLocaleString() : "";
-        return `<div class="note-item"><div class="note-title">${title}</div><div class="note-body">${body}</div>${date ? `<div class="muted" style="font-size:11px;margin-top:6px;">${escapeHtml(date)}</div>` : ""}</div>`;
+        return `<tr><td class="cell-title">${title}</td><td class="cell-body">${body}</td><td class="cell-date">${escapeHtml(date)}</td></tr>`;
       }).join("");
+      container.innerHTML = `<table class="admin-table"><thead><tr><th>Title</th><th>Body</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table>`;
     }
 
     // ---------- Wire up ----------
