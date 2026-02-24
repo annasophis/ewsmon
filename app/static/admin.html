@@ -5,34 +5,119 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>EWS Monitoring — Admin</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; max-width: 980px; }
-    h1 { margin: 0 0 12px; }
-    .muted { opacity: .7; }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 14px; }
-    label { display: block; font-size: 13px; margin: 10px 0 6px; }
-    input[type="text"], input[type="password"], textarea, select {
-      width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ccc; font-size: 14px;
+    :root {
+      --bg: #0b1020;
+      --panel: #111833;
+      --line: rgba(255,255,255,.08);
+      --text: #e8ecff;
+      --muted: #a9b2d6;
+      --ok: #31d07f;
+      --bad: #ff4d5e;
+      --warn: #ffcc66;
     }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      max-width: 980px;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #070a14 0%, var(--bg) 100%);
+      color: var(--text);
+    }
+    h1 { margin: 0 0 8px; font-size: 22px; font-weight: 700; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .muted code { background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 6px; font-size: 12px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card {
+      background: linear-gradient(180deg, rgba(17,24,51,.95) 0%, rgba(15,22,48,.85) 100%);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 700; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+    label:first-of-type { margin-top: 0; }
+    input[type="text"], input[type="password"], textarea, select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(25,34,72,.4);
+      color: var(--text);
+      font-size: 14px;
+    }
+    input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: rgba(124,156,255,.5);
+      box-shadow: 0 0 0 2px rgba(124,156,255,.15);
+    }
+    select { cursor: pointer; }
     textarea { min-height: 90px; resize: vertical; }
-    .btns { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
-    button { padding: 10px 12px; border-radius: 10px; border: 1px solid #222; background: #111; color: #fff; cursor: pointer; }
-    button.secondary { background: #fff; color: #111; border-color: #aaa; }
-    button.danger { background: #b00020; border-color: #b00020; }
-    pre { background: #f7f7f7; border: 1px solid #e6e6e6; padding: 12px; border-radius: 12px; overflow: auto; }
-    .pill { display:inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; border: 1px solid #ddd; }
-    .ok { background: #eaffea; border-color:#b7f0b7; }
-    .bad { background: #ffe9ea; border-color:#ffb9be; }
+    .btns { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+    button {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(25,34,72,.7);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button:hover { background: rgba(25,34,72,.9); }
+    button.secondary { background: rgba(25,34,72,.4); }
+    button.danger { background: rgba(255,77,94,.25); border-color: var(--bad); color: #ff8a94; }
+    button.danger:hover { background: rgba(255,77,94,.35); }
+    .pill {
+      display: inline-block;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--line);
+      background: rgba(25,34,72,.35);
+    }
+    .pill.ok { background: rgba(49,208,127,.15); border-color: var(--ok); color: var(--ok); }
+    .pill.bad { background: rgba(255,77,94,.15); border-color: var(--bad); color: var(--bad); }
+    /* Preview areas (no JSON) */
+    .preview-box {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,.2);
+      font-size: 13px;
+      color: var(--text);
+    }
+    .preview-box .preview-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+    .preview-box .banner-preview {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-weight: 600;
+    }
+    .preview-box .banner-preview.empty { color: var(--muted); font-style: italic; font-weight: normal; }
+    .notes-list-preview { display: flex; flex-direction: column; gap: 10px; }
+    .notes-list-preview .note-item {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+    }
+    .notes-list-preview .note-item .note-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+    .notes-list-preview .note-item .note-body { font-size: 12px; color: var(--muted); white-space: pre-wrap; word-break: break-word; }
+    .notes-list-preview .empty { color: var(--muted); font-style: italic; font-size: 13px; }
+    @media (max-width: 720px) { .row { grid-template-columns: 1fr; } }
   </style>
 </head>
 
 <body>
   <h1>EWS Monitoring — Admin</h1>
-  <div class="muted">Basic admin UI (uses <code>x-admin-key</code> header). No auth flow yet.</div>
+  <div class="muted">Uses <code>x-admin-key</code> header. Key is stored only in this browser (localStorage).</div>
 
-  <div class="card" style="margin-top:16px;">
-    <h2 style="margin:0 0 8px;">Admin Key</h2>
-    <div class="muted">Stored only in this browser (localStorage). Required for all /api/admin/* calls.</div>
+  <div class="card" style="margin-top:20px;">
+    <h2>Admin Key</h2>
     <label for="adminKey">x-admin-key</label>
     <input id="adminKey" type="password" placeholder="Paste ADMIN_KEY here" />
     <div class="btns">
@@ -41,10 +126,10 @@
     </div>
   </div>
 
-  <div class="row" style="margin-top:16px;">
+  <div class="row" style="margin-top:20px;">
     <!-- Banner -->
     <div class="card">
-      <h2 style="margin:0 0 8px;">Banner</h2>
+      <h2>Banner</h2>
       <div id="bannerStatus" class="pill">Loading…</div>
 
       <label>
@@ -52,7 +137,7 @@
         Enabled
       </label>
 
-      <label for="bannerType">notice_type</label>
+      <label for="bannerType">Type</label>
       <select id="bannerType">
         <option value="info">info</option>
         <option value="maintenance">maintenance</option>
@@ -60,13 +145,13 @@
         <option value="incident">incident</option>
       </select>
 
-      <label for="bannerMessage">message</label>
+      <label for="bannerMessage">Message (line breaks are shown on the dashboard)</label>
       <textarea id="bannerMessage" placeholder="Planned maintenance Sunday 2:00–3:00 AM ET"></textarea>
 
-      <label for="bannerStartsAt">starts_at (ISO, optional)</label>
+      <label for="bannerStartsAt">Starts at (ISO, optional)</label>
       <input id="bannerStartsAt" type="text" placeholder="2026-02-23T02:00:00-05:00">
 
-      <label for="bannerEndsAt">ends_at (ISO, optional)</label>
+      <label for="bannerEndsAt">Ends at (ISO, optional)</label>
       <input id="bannerEndsAt" type="text" placeholder="2026-02-23T03:00:00-05:00">
 
       <div class="btns">
@@ -75,22 +160,24 @@
         <button id="reloadBannerBtn" class="secondary" type="button">Reload</button>
       </div>
 
-      <label style="margin-top:12px;">Raw banner (GET /api/notices)</label>
-      <pre id="bannerRaw">{}</pre>
+      <div class="preview-box">
+        <div class="preview-label">Preview (as shown on dashboard)</div>
+        <div id="bannerPreview" class="banner-preview empty">No message yet.</div>
+      </div>
     </div>
 
     <!-- Notes -->
     <div class="card">
-      <h2 style="margin:0 0 8px;">Per-API Notes</h2>
-      <div class="muted">Pick a target (from /api/summary), add a note, preview notes.</div>
+      <h2>Per-API Notes</h2>
+      <div class="muted">Pick a target, add a note, then preview below.</div>
 
       <label for="targetSelect">Target</label>
       <select id="targetSelect"></select>
 
-      <label for="noteTitle">title</label>
+      <label for="noteTitle">Title</label>
       <input id="noteTitle" type="text" placeholder="Maintenance window" />
 
-      <label for="noteBody">body</label>
+      <label for="noteBody">Body</label>
       <textarea id="noteBody" placeholder="Planned maintenance Sunday 2–3 AM ET. Some requests may time out."></textarea>
 
       <div class="btns">
@@ -99,8 +186,10 @@
         <button id="reloadTargetsBtn" class="secondary" type="button">Reload targets</button>
       </div>
 
-      <label style="margin-top:12px;">Notes preview (GET /api/targets/{id}/notes)</label>
-      <pre id="notesPreview">[]</pre>
+      <div class="preview-box">
+        <div class="preview-label">Notes for selected target</div>
+        <div id="notesPreview" class="notes-list-preview"><span class="empty">Select a target and click Preview notes.</span></div>
+      </div>
     </div>
   </div>
 
@@ -169,13 +258,21 @@
     }
 
     // ---------- Banner ----------
+    function updateBannerPreview(){
+      const msg = $("bannerMessage").value.trim();
+      const el = $("bannerPreview");
+      el.textContent = msg || "";
+      el.classList.toggle("empty", !msg);
+      if (!msg) el.textContent = "No message yet.";
+    }
+
     async function loadBanner(){
       const raw = await fetchJson(API.NOTICES_GET).catch(() => null);
-      $("bannerRaw").textContent = JSON.stringify(raw, null, 2);
-
       const b = raw?.banner || null;
       if (!b){
         setPill($("bannerStatus"), "No banner object found", "bad");
+        $("bannerPreview").textContent = "No message yet.";
+        $("bannerPreview").classList.add("empty");
         return;
       }
 
@@ -186,6 +283,10 @@
       $("bannerEndsAt").value = b.ends_at || "";
 
       setPill($("bannerStatus"), b.enabled ? `Enabled (${b.type || "info"})` : "Disabled", b.enabled ? "ok" : "");
+      const el = $("bannerPreview");
+      el.textContent = b.message || "";
+      el.classList.toggle("empty", !b.message);
+      if (!b.message) el.textContent = "No message yet.";
     }
 
     async function saveBanner(enabledOverride=null){
@@ -208,6 +309,8 @@
       await loadBanner();
       alert(enabled ? "Banner saved ✅" : "Banner disabled ✅");
     }
+
+    $("bannerMessage").addEventListener("input", updateBannerPreview);
 
     // ---------- Notes ----------
     async function addNote(){
@@ -238,14 +341,32 @@
       await previewNotes();
     }
 
+    function escapeHtml(s){
+      const t = document.createTextNode(String(s ?? ""));
+      const div = document.createElement("div");
+      div.appendChild(t);
+      return div.innerHTML;
+    }
+
     async function previewNotes(){
+      const container = $("notesPreview");
       const targetId = $("targetSelect").value;
       if (!targetId){
-        $("notesPreview").textContent = "[]";
+        container.innerHTML = "<span class=\"empty\">Select a target and click Preview notes.</span>";
         return;
       }
       const data = await fetchJson(API.NOTES_GET(targetId));
-      $("notesPreview").textContent = JSON.stringify(data, null, 2);
+      const items = data?.items ?? (Array.isArray(data) ? data : []);
+      if (!items.length){
+        container.innerHTML = "<span class=\"empty\">No notes for this target.</span>";
+        return;
+      }
+      container.innerHTML = items.map(n => {
+        const title = escapeHtml(n.title ?? "");
+        const body = escapeHtml(n.body ?? n.note ?? "").replace(/\n/g, "<br>");
+        const date = n.created_at ? new Date(n.created_at).toLocaleString() : "";
+        return `<div class="note-item"><div class="note-title">${title}</div><div class="note-body">${body}</div>${date ? `<div class="muted" style="font-size:11px;margin-top:6px;">${escapeHtml(date)}</div>` : ""}</div>`;
+      }).join("");
     }
 
     // ---------- Wire up ----------
