@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>EWS Monitoring</title>
 
-  <!-- Apply saved theme before paint to avoid flash -->
+
   <script>
     (function(){
       var t = localStorage.getItem("ewsmon_theme");
       document.documentElement.dataset.theme = (t === "dark" ? "dark" : "light");
     })();
   </script>
-  <!-- cache-bust to avoid stale CSS/JS while iterating -->
+
   <link rel="stylesheet" href="/static/style.css?v=6" />
 </head>
 <body>
@@ -40,10 +40,10 @@
     </div>
   </header>
 
-  <!-- ✅ Banner MUST be outside the header (topbar is usually a flex row) -->
+
   <div id="banner" class="banner" style="display:none"></div>
 
-  <!-- Active incidents only (Investigating, Identified, Monitoring, Maintenance) -->
+
   <div id="incidentSection" class="incident-section" style="display:none">
     <div id="incidentActiveList"></div>
   </div>
@@ -94,14 +94,14 @@
           </thead>
 
           <tbody id="rows" class="table-rows-transition">
-            <!-- ✅ colspan updated from 9 -> 10 -->
+    
             <tr><td colspan="10" class="muted">Loading…</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- Resolved incidents: collapsible Incident History -->
+
     <section id="incidentHistorySection" class="panel incident-history-section">
       <div class="panelHeader">
         <button type="button" class="incident-history-toggle btn btn-secondary" id="incidentHistoryToggle" aria-expanded="false" aria-controls="incidentHistoryContent">Incident History</button>
@@ -129,7 +129,6 @@
       </footer>
   </main>
 
-  <!-- Chart modal: probe history over time -->
   <div id="chartModalBackdrop" class="modal-backdrop hidden"></div>
   <div id="chartModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="chartModalTitle">
     <div class="modal-card modal-card-wide">
@@ -153,7 +152,7 @@
     </div>
   </div>
 
-  <!-- ✅ Notes Modal (paste once) -->
+
   <div id="notesModalBackdrop" class="modal-backdrop hidden"></div>
 
   <div id="notesModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="notesModalTitle">
@@ -179,7 +178,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
-  <!-- cache-bust while iterating -->
+
   <script src="/static/app.js?v=5"></script>
 </body>
 </html>
