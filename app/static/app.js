@@ -98,7 +98,7 @@ function rowHtml(item){
   const upDay = pick(item, ["uptime_today", "uptime_1d", "uptime_1d_pct"]);
   const up7d = pick(item, ["uptime_7d", "uptime_week", "uptime_7d_pct"]);
 
-  const slowClass = (Number(lastMs) >= 1500) ? "slow" : "";
+  const slowClass = (Number(lastMs) >= DEGRADED_MS) ? "slow" : "";
   const canView = id !== undefined && id !== null && String(id).length > 0;
   const display = displayName(name);
 
@@ -136,22 +136,19 @@ function rowHtml(item){
   `;
 }
 
+const DEGRADED_MS = 1500; // same as backend: response >= this (ms) = degraded when up
+
 function computeTopStats(items){
   const svcCount = items.length;
   const upCount = items.filter(x => !!pick(x, ["is_up","ok","up"])).length;
   const downCount = svcCount - upCount;
-
-  let slowest = null;
-  for (const it of items){
+  const degradedCount = items.filter(it => {
+    const up = !!pick(it, ["is_up","ok","up"]);
     const ms = Number(pick(it, ["last_ms","duration_ms","ms"]));
-    if (!Number.isNaN(ms)){
-      if (!slowest || ms > slowest.ms){
-        slowest = { name: displayName(pick(it, ["name","service","service_name"]) ?? "—"), ms };
-      }
-    }
-  }
+    return up && !Number.isNaN(ms) && ms >= DEGRADED_MS;
+  }).length;
 
-  return { svcCount, upCount, downCount, slowest };
+  return { svcCount, upCount, downCount, degradedCount };
 }
 
 async function fetchJson(url){
@@ -173,12 +170,12 @@ function applyFilter() {
     rowsEl.innerHTML = filtered.map(rowHtml).join("");
   }
 
-  const { svcCount, upCount, downCount, slowest } = computeTopStats(filtered);
+  const { svcCount, upCount, downCount, degradedCount } = computeTopStats(filtered);
   document.getElementById("svcCount").textContent = String(svcCount);
   document.getElementById("upCount").textContent = String(upCount);
   document.getElementById("downCount").textContent = String(downCount);
-  document.getElementById("slowest").textContent =
-    slowest ? `${slowest.name} • ${slowest.ms.toFixed(0)} ms` : "—";
+  document.getElementById("degradedCount").textContent = String(degradedCount);
+  document.getElementById("degradedCount").className = "cardValue degraded";
 
   // Update segment active state
   document.querySelectorAll(".segmented .segment").forEach((btn) => {

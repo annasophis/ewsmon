@@ -110,6 +110,7 @@
   .cardValue{ margin-top:8px; font-size:22px; font-weight:800; }
   .cardValue.ok{ color:var(--ok); }
   .cardValue.bad{ color:var(--bad); }
+  .cardValue.degraded{ color:var(--warn); }
   
   .panel{
     margin-top:14px;

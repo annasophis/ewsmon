@@ -188,25 +188,23 @@ def api_summary(db: Session = Depends(get_db)) -> dict[str, Any]:
         )
     ).mappings().all()
 
+    DEGRADED_MS = 1500  # response time >= this (ms) counts as degraded when up
     items: list[dict[str, Any]] = []
     up = 0
     down = 0
-    slowest_name = None
-    slowest_ms = None
+    degraded = 0
 
     for r in rows:
         last_ok = bool(r["last_ok"]) if r["last_ok"] is not None else False
         is_up = bool(r["last_checked"]) and last_ok
+        last_ms = float(r["last_ms"]) if r["last_ms"] is not None else None
 
         if is_up:
             up += 1
+            if last_ms is not None and last_ms >= DEGRADED_MS:
+                degraded += 1
         else:
             down += 1
-
-        last_ms = float(r["last_ms"]) if r["last_ms"] is not None else None
-        if last_ms is not None and (slowest_ms is None or last_ms > slowest_ms):
-            slowest_ms = last_ms
-            slowest_name = r["name"]
 
         today_total = int(r["today_total"] or 0)
         wk_total = int(r["wk_total"] or 0)
@@ -238,10 +236,7 @@ def api_summary(db: Session = Depends(get_db)) -> dict[str, Any]:
             "services": len(items),
             "up": up,
             "down": down,
-            "slowest_last": {
-                "name": slowest_name,
-                "ms": round(slowest_ms, 2) if slowest_ms is not None else None,
-            },
+            "degraded": degraded,
         },
         # ✅ app.js reads data.items
         "items": items,
