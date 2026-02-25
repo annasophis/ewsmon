@@ -6,7 +6,7 @@
   <title>EWS Monitoring</title>
 
   <!-- cache-bust to avoid stale CSS/JS while iterating -->
-  <link rel="stylesheet" href="/static/style.css?v=4" />
+  <link rel="stylesheet" href="/static/style.css?v=5" />
 </head>
 <body>
   <header class="topbar">
@@ -32,20 +32,9 @@
   <!-- ✅ Banner MUST be outside the header (topbar is usually a flex row) -->
   <div id="banner" class="banner" style="display:none"></div>
 
-  <!-- Incident Updates: banner + timeline (hidden when no active incident) -->
+  <!-- Active incidents only (Investigating, Identified, Monitoring, Maintenance) -->
   <div id="incidentSection" class="incident-section" style="display:none">
-    <div id="incidentBanner" class="incident-banner card">
-      <div class="incident-banner-inner">
-        <div class="incident-status-label" id="incidentStatusLabel"></div>
-        <div class="incident-title" id="incidentTitle"></div>
-        <div class="incident-message" id="incidentMessage"></div>
-        <div class="incident-updated muted" id="incidentUpdated"></div>
-      </div>
-    </div>
-    <div class="incident-timeline-wrap">
-      <button type="button" class="incident-toggle btn btn-secondary" id="incidentToggle" aria-expanded="false">View updates</button>
-      <div id="incidentTimeline" class="incident-timeline hidden"></div>
-    </div>
+    <div id="incidentActiveList"></div>
   </div>
 
   <main class="wrap">
@@ -98,6 +87,16 @@
             <tr><td colspan="10" class="muted">Loading…</td></tr>
           </tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- Resolved incidents: collapsible Incident History -->
+    <section id="incidentHistorySection" class="panel incident-history-section">
+      <div class="panelHeader">
+        <button type="button" class="incident-history-toggle btn btn-secondary" id="incidentHistoryToggle" aria-expanded="false" aria-controls="incidentHistoryContent">Incident History</button>
+      </div>
+      <div id="incidentHistoryContent" class="incident-history-content hidden" role="region">
+        <div id="incidentHistoryList" class="incident-history-list"></div>
       </div>
     </section>
 
@@ -170,6 +169,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <!-- cache-bust while iterating -->
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>

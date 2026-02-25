@@ -17,7 +17,7 @@ from app.settings import ENVIRONMENT
 from fastapi import Request, HTTPException
 from pydantic import BaseModel
 from app.models import SiteNotice, ApiNote, IncidentUpdate
-
+from fastapi.responses import FileResponse
 log = get_logger(__name__)
 
 app = FastAPI(title="EWS Monitoring (ewsmon)")
@@ -95,10 +95,18 @@ def health(db: Session = Depends(get_db)):
 
 from fastapi.responses import RedirectResponse
 
+import os
+
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 @app.get("/", include_in_schema=False)
 def home():
-    return RedirectResponse(url="/static/index.html")
+    return FileResponse(os.path.join(BASE_DIR, "static/index.html"))
 
+@app.get("/admin", include_in_schema=False)
+def admin():
+    return FileResponse(os.path.join(BASE_DIR, "static/admin.html"))
 # -----------------------------
 # API used by the frontend UI
 # -----------------------------
@@ -388,51 +396,151 @@ def create_note(
 # -----------------------------
 
 VALID_INCIDENT_STATUSES = {"investigating", "identified", "monitoring", "resolved", "maintenance"}
+OPEN_STATUSES = {"investigating", "identified", "monitoring", "maintenance"}  # not resolved
+
+
+def _incident_timeline_rows(root: IncidentUpdate) -> list[IncidentUpdate]:
+    """Root + all updates ordered by created_at."""
+    all_rows = [root] + sorted(root.updates, key=lambda u: u.created_at)
+    return sorted(all_rows, key=lambda r: r.created_at)
+
+
+def _latest_status_row(root: IncidentUpdate) -> IncidentUpdate:
+    """Row that defines current status/message (latest by created_at)."""
+    timeline = _incident_timeline_rows(root)
+    return timeline[-1] if timeline else root
 
 
 @app.get("/api/incidents/current")
 def api_incidents_current(db: Session = Depends(get_db)):
-    row = (
+    """Single most recent active incident (root only). Kept for backward compat."""
+    root = (
         db.query(IncidentUpdate)
-        .filter(IncidentUpdate.is_active == True)
+        .filter(IncidentUpdate.incident_id.is_(None), IncidentUpdate.is_active == True)
         .order_by(IncidentUpdate.created_at.desc())
         .limit(1)
         .first()
     )
-    if not row:
+    if not root:
         return {"active": False}
+    latest = _latest_status_row(root)
+    title = root.title or latest.message[:80] if latest.message else ""
     return {
         "active": True,
-        "id": row.id,
-        "status": row.status,
-        "title": row.title,
-        "message": row.message,
-        "created_at": row.created_at.isoformat(),
+        "id": root.id,
+        "status": latest.status,
+        "title": title or "Incident",
+        "message": latest.message,
+        "created_at": latest.created_at.isoformat(),
     }
 
 
-@app.get("/api/incidents")
-def api_incidents_list(limit: int = 20, db: Session = Depends(get_db)):
-    limit = max(1, min(limit, 100))
-    rows = (
+@app.get("/api/incidents/active")
+def api_incidents_active(db: Session = Depends(get_db)):
+    """List of open incidents (roots with is_active=True). Only Investigating, Identified, Monitoring, Maintenance."""
+    roots = (
         db.query(IncidentUpdate)
+        .filter(IncidentUpdate.incident_id.is_(None), IncidentUpdate.is_active == True)
         .order_by(IncidentUpdate.created_at.desc())
+        .all()
+    )
+    items = []
+    for root in roots:
+        latest = _latest_status_row(root)
+        items.append({
+            "id": root.id,
+            "title": root.title or "Incident",
+            "affected_service": root.affected_service,
+            "status": latest.status,
+            "message": latest.message,
+            "created_at": root.created_at.isoformat(),
+            "updated_at": latest.created_at.isoformat(),
+        })
+    return {"items": items}
+
+
+@app.get("/api/incidents/history")
+def api_incidents_history(limit: int = 50, db: Session = Depends(get_db)):
+    """Resolved incidents for the Incident History section."""
+    limit = max(1, min(limit, 100))
+    roots = (
+        db.query(IncidentUpdate)
+        .filter(IncidentUpdate.incident_id.is_(None), IncidentUpdate.is_active == False)
+        .order_by(IncidentUpdate.resolved_at.desc().nulls_last(), IncidentUpdate.created_at.desc())
         .limit(limit)
         .all()
     )
+    items = []
+    for root in roots:
+        resolved_at = root.resolved_at or root.created_at
+        opened_at = root.created_at
+        duration_seconds = int((resolved_at - opened_at).total_seconds()) if resolved_at and opened_at else None
+        items.append({
+            "id": root.id,
+            "title": root.title or "Incident",
+            "affected_service": root.affected_service,
+            "created_at": opened_at.isoformat(),
+            "resolved_at": resolved_at.isoformat() if resolved_at else None,
+            "duration_seconds": duration_seconds,
+        })
+    return {"items": items}
+
+
+@app.get("/api/incidents/{incident_id}")
+def api_incident_get(incident_id: int, db: Session = Depends(get_db)):
+    """Full incident with timeline (root + all updates)."""
+    root = db.query(IncidentUpdate).filter(
+        IncidentUpdate.id == incident_id,
+        IncidentUpdate.incident_id.is_(None),
+    ).first()
+    if not root:
+        raise HTTPException(404, "Incident not found")
+    timeline = _incident_timeline_rows(root)
     return {
-        "items": [
+        "id": root.id,
+        "title": root.title or "Incident",
+        "affected_service": root.affected_service,
+        "is_active": root.is_active,
+        "created_at": root.created_at.isoformat(),
+        "resolved_at": root.resolved_at.isoformat() if root.resolved_at else None,
+        "timeline": [
             {
                 "id": r.id,
-                "is_active": r.is_active,
                 "status": r.status,
                 "title": r.title,
                 "message": r.message,
                 "created_at": r.created_at.isoformat(),
             }
-            for r in rows
-        ]
+            for r in timeline
+        ],
     }
+
+
+@app.get("/api/incidents")
+def api_incidents_list(limit: int = 20, db: Session = Depends(get_db)):
+    """List all incident roots (for admin)."""
+    limit = max(1, min(limit, 100))
+    rows = (
+        db.query(IncidentUpdate)
+        .filter(IncidentUpdate.incident_id.is_(None))
+        .order_by(IncidentUpdate.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    out = []
+    for r in rows:
+        latest = _latest_status_row(r)
+        out.append({
+            "id": r.id,
+            "is_active": r.is_active,
+            "status": latest.status,
+            "title": r.title or "Incident",
+            "message": latest.message,
+            "affected_service": r.affected_service,
+            "created_at": r.created_at.isoformat(),
+            "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
+        })
+    return {"items": out}
 
 
 class IncidentCreate(BaseModel):
@@ -440,6 +548,12 @@ class IncidentCreate(BaseModel):
     title: str
     message: str
     is_active: bool | None = True
+    affected_service: str | None = None
+
+
+class IncidentUpdateCreate(BaseModel):
+    status: str
+    message: str
 
 
 @app.post("/api/incidents")
@@ -451,16 +565,57 @@ def api_incidents_create(
     require_incident_admin(request)
     if payload.status not in VALID_INCIDENT_STATUSES:
         raise HTTPException(400, f"status must be one of: {sorted(VALID_INCIDENT_STATUSES)}")
+    title = (payload.title or "").strip()
+    if not title:
+        raise HTTPException(400, "title is required")
     row = IncidentUpdate(
+        incident_id=None,
         is_active=payload.is_active if payload.is_active is not None else True,
         status=payload.status,
-        title=payload.title.strip(),
-        message=payload.message.strip(),
+        title=title,
+        message=(payload.message or "").strip(),
+        affected_service=(payload.affected_service or "").strip() or None,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
     return {"ok": True, "id": row.id}
+
+
+@app.post("/api/incidents/{incident_id}/updates")
+def api_incidents_add_update(
+    incident_id: int,
+    payload: IncidentUpdateCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_incident_admin(request)
+    if payload.status not in VALID_INCIDENT_STATUSES:
+        raise HTTPException(400, f"status must be one of: {sorted(VALID_INCIDENT_STATUSES)}")
+    root = db.query(IncidentUpdate).filter(
+        IncidentUpdate.id == incident_id,
+        IncidentUpdate.incident_id.is_(None),
+    ).first()
+    if not root:
+        raise HTTPException(404, "Incident not found")
+    if not root.is_active:
+        raise HTTPException(400, "Cannot add updates to a resolved incident")
+    now = datetime.now(timezone.utc)
+    update_row = IncidentUpdate(
+        incident_id=root.id,
+        is_active=True,
+        status=payload.status,
+        title=None,
+        message=(payload.message or "").strip(),
+        parent=root,
+    )
+    db.add(update_row)
+    if payload.status == "resolved":
+        root.is_active = False
+        root.resolved_at = now
+    db.commit()
+    db.refresh(update_row)
+    return {"ok": True, "id": update_row.id}
 
 
 @app.post("/api/incidents/{incident_id}/resolve")
@@ -470,10 +625,25 @@ def api_incidents_resolve(
     db: Session = Depends(get_db),
 ):
     require_incident_admin(request)
-    row = db.query(IncidentUpdate).filter(IncidentUpdate.id == incident_id).first()
-    if not row:
+    root = db.query(IncidentUpdate).filter(
+        IncidentUpdate.id == incident_id,
+        IncidentUpdate.incident_id.is_(None),
+    ).first()
+    if not root:
         raise HTTPException(404, "Incident not found")
-    row.is_active = False
-    row.status = "resolved"
+    if not root.is_active:
+        return {"ok": True}
+    now = datetime.now(timezone.utc)
+    update_row = IncidentUpdate(
+        incident_id=root.id,
+        is_active=False,
+        status="resolved",
+        title=None,
+        message="Incident resolved.",
+        parent=root,
+    )
+    db.add(update_row)
+    root.is_active = False
+    root.resolved_at = now
     db.commit()
     return {"ok": True}

@@ -83,11 +83,21 @@ class ApiNote(Base):
 
 
 class IncidentUpdate(Base):
+    """
+    Incident updates. Root row (incident_id=null) starts an incident; rows with incident_id set
+    are status updates for that incident. Timeline = root + all updates ordered by created_at.
+    """
     __tablename__ = "incident_update"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_id: Mapped[int | None] = mapped_column(ForeignKey("incident_update.id", ondelete="CASCADE"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False)  # investigating|identified|monitoring|resolved|maintenance
-    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(300), nullable=True)  # required on root, optional on updates
     message: Mapped[str] = mapped_column(Text, nullable=False)
+    affected_service: Mapped[str | None] = mapped_column(String(200), nullable=True)  # only on root
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # set on root when resolved
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    parent: Mapped["IncidentUpdate | None"] = relationship(remote_side="IncidentUpdate.id", back_populates="updates")
+    updates: Mapped[list["IncidentUpdate"]] = relationship(back_populates="parent", cascade="all, delete-orphan")

@@ -1,6 +1,7 @@
 const REFRESH_MS = 10_000;
 const STORAGE_KEY_FILTER = "ewsmon_env_filter";
 const STORAGE_KEY_INCIDENT_TIMELINE_OPEN = "ewsmon_incident_timeline_open";
+const STORAGE_KEY_INCIDENT_HISTORY_OPEN = "ewsmon_incident_history_open";
 const INCIDENT_MSG_TRUNCATE = 120;
 
 /** Infer environment: "uat" if name contains "(UAT)" or url contains "certwebservices", else "prod" */
@@ -213,7 +214,8 @@ async function load(){
     applyFilter();
     lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
 
-    await loadIncidentCurrent();
+    await loadIncidentActive();
+    await loadIncidentHistory();
   } catch (e){
     rowsEl.innerHTML = `<tr><td colspan="10" class="muted">Error loading data: ${escapeHtml(String(e.message || e))}</td></tr>`;
     lastUpdatedEl.textContent = `Last updated: (error)`;
@@ -243,84 +245,204 @@ document.querySelectorAll(".segmented .segment").forEach((btn) => {
 })();
 
 // -------------------- Incident Updates --------------------
-function getIncidentTimelineOpen() {
+function getIncidentTimelineOpen(id) {
   try {
-    return localStorage.getItem(STORAGE_KEY_INCIDENT_TIMELINE_OPEN) === "true";
+    const key = STORAGE_KEY_INCIDENT_TIMELINE_OPEN + "_" + id;
+    return localStorage.getItem(key) === "true";
   } catch (_) {}
   return false;
 }
-function setIncidentTimelineOpen(open) {
+function setIncidentTimelineOpen(id, open) {
   try {
-    localStorage.setItem(STORAGE_KEY_INCIDENT_TIMELINE_OPEN, open ? "true" : "false");
+    const key = STORAGE_KEY_INCIDENT_TIMELINE_OPEN + "_" + id;
+    localStorage.setItem(key, open ? "true" : "false");
+  } catch (_) {}
+}
+function getIncidentHistoryOpen() {
+  try {
+    return localStorage.getItem(STORAGE_KEY_INCIDENT_HISTORY_OPEN) === "true";
+  } catch (_) {}
+  return false;
+}
+function setIncidentHistoryOpen(open) {
+  try {
+    localStorage.setItem(STORAGE_KEY_INCIDENT_HISTORY_OPEN, open ? "true" : "false");
   } catch (_) {}
 }
 
-async function loadIncidentCurrent() {
-  const section = document.getElementById("incidentSection");
-  const banner = document.getElementById("incidentBanner");
-  if (!section || !banner) return;
-  try {
-    const data = await fetchJson("/api/incidents/current");
-    if (!data.active) {
-      section.style.display = "none";
-      return;
-    }
-    section.style.display = "block";
-    banner.className = "incident-banner card " + (data.status || "investigating");
-    document.getElementById("incidentStatusLabel").textContent = (data.status || "").replace(/_/g, " ");
-    document.getElementById("incidentTitle").textContent = data.title || "";
-    document.getElementById("incidentMessage").textContent = data.message || "";
-    document.getElementById("incidentUpdated").textContent = "Last updated: " + fmtTime(data.created_at);
-
-    const toggle = document.getElementById("incidentToggle");
-    const timelineEl = document.getElementById("incidentTimeline");
-    const isOpen = getIncidentTimelineOpen();
-    toggle.textContent = isOpen ? "Hide updates" : "View updates";
-    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
-    timelineEl.classList.toggle("hidden", !isOpen);
-    if (isOpen && timelineEl.children.length === 0) loadIncidentTimeline();
-  } catch (_) {
-    section.style.display = "none";
-  }
+function renderIncidentTimelineItems(timeline) {
+  if (!timeline || timeline.length === 0) return "<li class=\"muted\">No updates yet.</li>";
+  return timeline.map((it) => {
+    const ts = escapeHtml(fmtTime(it.created_at));
+    const status = (it.status || "").toLowerCase();
+    const msg = (it.message || "").trim();
+    const truncated = msg.length > INCIDENT_MSG_TRUNCATE;
+    const displayMsg = truncated ? msg.slice(0, INCIDENT_MSG_TRUNCATE) + "…" : msg;
+    const msgClass = truncated ? "incident-msg truncated" : "incident-msg";
+    const fullHtml = escapeHtml(msg).replace(/\n/g, "<br>");
+    const dataFull = fullHtml.replace(/"/g, "&quot;");
+    return `<li><span class="incident-ts">${ts}</span><span class="incident-pill ${escapeHtml(status)}">${escapeHtml(status)}</span><div class="${msgClass}" data-full="${dataFull}" title="${truncated ? "Click to expand" : ""}">${escapeHtml(displayMsg)}</div></li>`;
+  }).join("");
 }
 
-async function loadIncidentTimeline() {
-  const timelineEl = document.getElementById("incidentTimeline");
+function bindTruncatedMessages(container) {
+  if (!container) return;
+  container.querySelectorAll(".incident-msg.truncated").forEach((el) => {
+    el.addEventListener("click", () => {
+      const full = el.getAttribute("data-full");
+      if (full) { el.innerHTML = full; el.classList.remove("truncated"); el.removeAttribute("data-full"); }
+    });
+  });
+}
+
+async function loadIncidentTimelineForId(incidentId, timelineEl) {
   if (!timelineEl) return;
   try {
-    const data = await fetchJson("/api/incidents?limit=20");
-    const items = data.items || [];
-    const html = items.map((it) => {
-      const ts = escapeHtml(fmtTime(it.created_at));
-      const status = (it.status || "").toLowerCase();
-      const msg = (it.message || "").trim();
-      const truncated = msg.length > INCIDENT_MSG_TRUNCATE;
-      const displayMsg = truncated ? msg.slice(0, INCIDENT_MSG_TRUNCATE) + "…" : msg;
-      const msgClass = truncated ? "incident-msg truncated" : "incident-msg";
-      const fullHtml = escapeHtml(msg).replace(/\n/g, "<br>");
-      const dataFull = fullHtml.replace(/"/g, "&quot;");
-      return `<li><span class="incident-ts">${ts}</span><span class="incident-pill ${escapeHtml(status)}">${escapeHtml(status)}</span><div class="${msgClass}" data-full="${dataFull}" title="${truncated ? "Click to expand" : ""}">${escapeHtml(displayMsg)}</div></li>`;
-    }).join("");
-    timelineEl.innerHTML = html || "<li class=\"muted\">No updates yet.</li>";
-    timelineEl.querySelectorAll(".incident-msg.truncated").forEach((el) => {
-      el.addEventListener("click", () => {
-        const full = el.getAttribute("data-full");
-        if (full) { el.innerHTML = full; el.classList.remove("truncated"); el.removeAttribute("data-full"); }
-      });
-    });
+    const data = await fetchJson("/api/incidents/" + encodeURIComponent(incidentId));
+    const timeline = data.timeline || [];
+    timelineEl.innerHTML = renderIncidentTimelineItems(timeline);
+    bindTruncatedMessages(timelineEl);
   } catch (_) {
     timelineEl.innerHTML = "<li class=\"muted\">Could not load updates.</li>";
   }
 }
 
-document.getElementById("incidentToggle")?.addEventListener("click", () => {
-  const toggle = document.getElementById("incidentToggle");
-  const timelineEl = document.getElementById("incidentTimeline");
-  const isOpen = timelineEl.classList.toggle("hidden") === false;
-  setIncidentTimelineOpen(isOpen);
-  toggle.textContent = isOpen ? "Hide updates" : "View updates";
-  toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
-  if (isOpen) loadIncidentTimeline();
+async function loadIncidentActive() {
+  const section = document.getElementById("incidentSection");
+  const listEl = document.getElementById("incidentActiveList");
+  if (!section || !listEl) return;
+  try {
+    const data = await fetchJson("/api/incidents/active");
+    const items = data.items || [];
+    if (items.length === 0) {
+      section.style.display = "none";
+      return;
+    }
+    section.style.display = "block";
+    listEl.innerHTML = items.map((inc) => {
+      const id = inc.id;
+      const status = (inc.status || "investigating").toLowerCase();
+      const isOpen = getIncidentTimelineOpen(id);
+      const cardId = "incident-card-" + id;
+      const timelineId = "incident-timeline-" + id;
+      const toggleId = "incident-toggle-" + id;
+      return `
+        <div class="incident-card" id="${cardId}" data-incident-id="${escapeHtml(String(id))}">
+          <div class="incident-banner card ${escapeHtml(status)}">
+            <div class="incident-banner-inner">
+              <div class="incident-status-label">${escapeHtml((inc.status || "").replace(/_/g, " "))}</div>
+              <div class="incident-title">${escapeHtml(inc.title || "Incident")}</div>
+              <div class="incident-message">${escapeHtml(inc.message || "")}</div>
+              <div class="incident-updated muted">Last updated: ${escapeHtml(fmtTime(inc.updated_at || inc.created_at))}</div>
+            </div>
+          </div>
+          <div class="incident-timeline-wrap">
+            <button type="button" class="incident-toggle btn btn-secondary" id="${toggleId}" data-incident-id="${escapeHtml(String(id))}" aria-expanded="${isOpen ? "true" : "false"}">${isOpen ? "Hide updates" : "View updates"}</button>
+            <div id="${timelineId}" class="incident-timeline ${isOpen ? "" : "hidden"}"></div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    items.forEach((inc) => {
+      const id = inc.id;
+      const toggle = document.getElementById("incident-toggle-" + id);
+      const timelineEl = document.getElementById("incident-timeline-" + id);
+      const isOpen = getIncidentTimelineOpen(id);
+      if (toggle && timelineEl) {
+        if (isOpen) loadIncidentTimelineForId(id, timelineEl);
+        toggle.addEventListener("click", () => {
+          const open = timelineEl.classList.toggle("hidden") === false;
+          setIncidentTimelineOpen(id, open);
+          toggle.textContent = open ? "Hide updates" : "View updates";
+          toggle.setAttribute("aria-expanded", open ? "true" : "false");
+          if (open) loadIncidentTimelineForId(id, timelineEl);
+        });
+      }
+    });
+  } catch (_) {
+    section.style.display = "none";
+  }
+}
+
+async function loadIncidentHistory() {
+  const content = document.getElementById("incidentHistoryContent");
+  const listEl = document.getElementById("incidentHistoryList");
+  const toggleBtn = document.getElementById("incidentHistoryToggle");
+  if (!content || !listEl || !toggleBtn) return;
+  const isOpen = getIncidentHistoryOpen();
+  content.classList.toggle("hidden", !isOpen);
+  toggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  toggleBtn.textContent = isOpen ? "Hide Incident History" : "Incident History";
+
+  try {
+    const data = await fetchJson("/api/incidents/history?limit=50");
+    const items = data.items || [];
+    if (items.length === 0) {
+      listEl.innerHTML = "<p class=\"muted\">No resolved incidents.</p>";
+      return;
+    }
+    function formatDuration(sec) {
+      if (sec == null || sec < 0) return "—";
+      if (sec < 60) return sec + "s";
+      if (sec < 3600) return Math.floor(sec / 60) + "m";
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      return m ? h + "h " + m + "m" : h + "h";
+    }
+    listEl.innerHTML = items.map((it) => {
+      const id = it.id;
+      const durationStr = formatDuration(it.duration_seconds);
+      const expandedId = "incident-history-expanded-" + id;
+      return `
+        <div class="incident-history-item" data-incident-id="${escapeHtml(String(id))}">
+          <div class="incident-history-row">
+            <span class="incident-history-title">${escapeHtml(it.title || "Incident")}</span>
+            <span class="incident-history-meta">${escapeHtml(it.affected_service || "—")} • ${escapeHtml(fmtTime(it.created_at))} • ${escapeHtml(durationStr)}</span>
+            <button type="button" class="btn btn-secondary btn-sm js-view-incident-history" data-incident-id="${escapeHtml(String(id))}">View</button>
+          </div>
+          <div id="${expandedId}" class="incident-history-timeline hidden"></div>
+        </div>
+      `;
+    }).join("");
+
+    listEl.querySelectorAll(".js-view-incident-history").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-incident-id");
+        const expandedEl = document.getElementById("incident-history-expanded-" + id);
+        if (!expandedEl) return;
+        const isExpanded = expandedEl.classList.toggle("hidden") === false;
+        btn.textContent = isExpanded ? "Hide" : "View";
+        if (isExpanded && expandedEl.children.length === 0) {
+          expandedEl.innerHTML = "<ul class=\"incident-timeline\">Loading…</ul>";
+          fetchJson("/api/incidents/" + encodeURIComponent(id)).then((data) => {
+            const timeline = data.timeline || [];
+            const ul = expandedEl.querySelector("ul");
+            if (ul) {
+              ul.innerHTML = renderIncidentTimelineItems(timeline);
+              bindTruncatedMessages(ul);
+            }
+          }).catch(() => {
+            const ul = expandedEl.querySelector("ul");
+            if (ul) ul.innerHTML = "<li class=\"muted\">Could not load timeline.</li>";
+          });
+        }
+      });
+    });
+  } catch (_) {
+    listEl.innerHTML = "<p class=\"muted\">Could not load incident history.</p>";
+  }
+}
+
+document.getElementById("incidentHistoryToggle")?.addEventListener("click", () => {
+  const content = document.getElementById("incidentHistoryContent");
+  const toggleBtn = document.getElementById("incidentHistoryToggle");
+  if (!content || !toggleBtn) return;
+  const isOpen = content.classList.toggle("hidden") === false;
+  setIncidentHistoryOpen(isOpen);
+  toggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  toggleBtn.textContent = isOpen ? "Hide Incident History" : "Incident History";
+  if (isOpen) loadIncidentHistory();
 });
 
 load();

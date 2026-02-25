@@ -363,15 +363,43 @@
           <input id="incidentTitle" type="text" placeholder="e.g. Degraded EWS response times" />
         </div>
         <div class="form-group">
+          <label for="incidentAffectedService">Affected service (optional)</label>
+          <input id="incidentAffectedService" type="text" placeholder="e.g. EWS Validate API" />
+        </div>
+        <div class="form-group">
           <label for="incidentMessage">Message</label>
           <textarea id="incidentMessage" placeholder="Describe the incident and any mitigation steps. Line breaks are preserved." rows="3"></textarea>
         </div>
         <div class="btn-group">
-          <button id="incidentSubmitBtn" class="btn btn-primary">Create incident update</button>
+          <button id="incidentSubmitBtn" class="btn btn-primary">Create incident</button>
           <button id="incidentReloadBtn" class="btn btn-secondary" type="button">Reload list</button>
         </div>
         <div class="preview-box" style="margin-top: var(--space-md);">
-          <div class="preview-label">Recent incidents (Resolve marks as resolved and hides from current banner)</div>
+          <div class="preview-label">Add update to active incident</div>
+          <div style="display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: flex-end; margin-top: 8px;">
+            <div class="form-group" style="margin-bottom: 0; min-width: 180px;">
+              <label for="incidentSelectForUpdate">Incident</label>
+              <select id="incidentSelectForUpdate"><option value="">— Select —</option></select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0; min-width: 140px;">
+              <label for="updateStatus">Status</label>
+              <select id="updateStatus">
+                <option value="investigating">investigating</option>
+                <option value="identified">identified</option>
+                <option value="monitoring">monitoring</option>
+                <option value="maintenance">maintenance</option>
+                <option value="resolved">resolved</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex: 1; margin-bottom: 0; min-width: 160px;">
+              <label for="updateMessage">Message</label>
+              <input id="updateMessage" type="text" placeholder="Status update message" />
+            </div>
+            <button id="addUpdateBtn" class="btn btn-primary" type="button">Add update</button>
+          </div>
+        </div>
+        <div class="preview-box" style="margin-top: var(--space-md);">
+          <div class="preview-label">Recent incidents (roots). Resolve closes the incident and moves it to Incident History.</div>
           <div id="incidentList" class="table-wrap">
             <span class="notes-empty">Click Reload list to load.</span>
           </div>
@@ -389,6 +417,7 @@
       NOTES_GET: (id) => `/api/targets/${encodeURIComponent(id)}/notes`,
       INCIDENTS_GET: "/api/incidents",
       INCIDENTS_POST: "/api/incidents",
+      INCIDENT_ADD_UPDATE: (id) => `/api/incidents/${encodeURIComponent(id)}/updates`,
       INCIDENT_RESOLVE: (id) => `/api/incidents/${encodeURIComponent(id)}/resolve`,
     };
 
@@ -571,9 +600,15 @@
     // ---------- Incident Updates ----------
     async function loadIncidentList(){
       const container = $("incidentList");
+      const selectForUpdate = $("incidentSelectForUpdate");
       try {
-        const data = await fetchJson(API.INCIDENTS_GET + "?limit=20");
+        const data = await fetchJson(API.INCIDENTS_GET + "?limit=50");
         const items = data.items || [];
+        const activeItems = items.filter(it => it.is_active);
+        if (selectForUpdate) {
+          selectForUpdate.innerHTML = "<option value=\"\">— Select —</option>" +
+            activeItems.map(it => `<option value="${it.id}">#${it.id} ${escapeHtml(it.title || "Incident")}</option>`).join("");
+        }
         if (!items.length){
           container.innerHTML = "<span class=\"notes-empty\">No incidents yet.</span>";
           return;
@@ -584,11 +619,12 @@
           const msg = escapeHtml((it.message ?? "").replace(/\n/g, " ")).slice(0, 80) + ((it.message || "").length > 80 ? "…" : "");
           const date = it.created_at ? new Date(it.created_at).toLocaleString() : "";
           const status = escapeHtml(it.status || "");
+          const affected = escapeHtml(it.affected_service || "—");
           const active = it.is_active ? "<span class=\"pill bad\">Active</span>" : "<span class=\"pill ok\">Resolved</span>";
           const resolveBtn = it.is_active ? `<button type="button" class="btn btn-secondary btn-sm js-resolve-incident" data-id="${id}">Resolve</button>` : "";
-          return `<tr><td class="cell-title">${title}</td><td class="cell-body">${msg}</td><td>${status}</td><td>${active}</td><td class="cell-date">${escapeHtml(date)}</td><td>${resolveBtn}</td></tr>`;
+          return `<tr><td class="cell-title">${title}</td><td class="cell-body">${msg}</td><td>${affected}</td><td>${status}</td><td>${active}</td><td class="cell-date">${escapeHtml(date)}</td><td>${resolveBtn}</td></tr>`;
         }).join("");
-        container.innerHTML = `<table class="admin-table"><thead><tr><th>Title</th><th>Message</th><th>Status</th><th>State</th><th>Date</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+        container.innerHTML = `<table class="admin-table"><thead><tr><th>Title</th><th>Message</th><th>Affected</th><th>Status</th><th>State</th><th>Date</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
         container.querySelectorAll(".js-resolve-incident").forEach(btn => {
           btn.addEventListener("click", () => resolveIncident(Number(btn.getAttribute("data-id"))));
         });
@@ -601,6 +637,7 @@
       const status = $("incidentStatus").value.trim();
       const title = $("incidentTitle").value.trim();
       const message = $("incidentMessage").value.trim();
+      const affected_service = ($("incidentAffectedService") && $("incidentAffectedService").value.trim()) || null;
       if (!title || !message){
         alert("Title and message are required.");
         return;
@@ -608,11 +645,34 @@
       await fetchJson(API.INCIDENTS_POST, {
         method: "POST",
         headers: incidentHeaders(),
-        body: JSON.stringify({ status, title, message, is_active: true })
+        body: JSON.stringify({ status, title, message, is_active: true, affected_service })
       });
       $("incidentTitle").value = "";
+      if ($("incidentAffectedService")) $("incidentAffectedService").value = "";
       $("incidentMessage").value = "";
-      alert("Incident update created ✅");
+      alert("Incident created ✅");
+      await loadIncidentList();
+    }
+
+    async function addUpdate(){
+      const incidentId = ($("incidentSelectForUpdate") && $("incidentSelectForUpdate").value) || "";
+      const status = ($("updateStatus") && $("updateStatus").value) || "";
+      const message = ($("updateMessage") && $("updateMessage").value || "").trim();
+      if (!incidentId){
+        alert("Select an incident.");
+        return;
+      }
+      if (!message){
+        alert("Message is required for the update.");
+        return;
+      }
+      await fetchJson(API.INCIDENT_ADD_UPDATE(incidentId), {
+        method: "POST",
+        headers: incidentHeaders(),
+        body: JSON.stringify({ status, message })
+      });
+      if ($("updateMessage")) $("updateMessage").value = "";
+      alert("Update added ✅");
       await loadIncidentList();
     }
 
@@ -647,6 +707,7 @@
 
     $("incidentSubmitBtn").addEventListener("click", () => createIncident().catch(e => alert(e.message)));
     $("incidentReloadBtn").addEventListener("click", () => loadIncidentList().catch(e => alert(e.message)));
+    $("addUpdateBtn").addEventListener("click", () => addUpdate().catch(e => alert(e.message)));
 
     // ---------- Init ----------
     (async function init(){

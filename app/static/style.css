@@ -223,6 +223,10 @@
     margin-left: auto;
     margin-right: auto;
   }
+  .incident-card{
+    margin-bottom: 14px;
+  }
+  .incident-card:last-child{ margin-bottom: 0; }
   .incident-banner.card{
     border-left-width: 4px;
     border-left-style: solid;
@@ -281,6 +285,24 @@
     .incident-section{ padding: 10px 12px 0; }
     .incident-timeline li{ grid-template-columns: 1fr; gap: 4px; }
   }
+
+  /* Incident History (resolved) — collapsible section */
+  .incident-history-section{ margin-top: 24px; }
+  .incident-history-toggle{ margin: 0; }
+  .incident-history-content{ padding-top: 12px; }
+  .incident-history-list{ display: flex; flex-direction: column; gap: 8px; }
+  .incident-history-item{ border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: rgba(17,24,51,.4); }
+  .incident-history-row{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+  .incident-history-title{ font-weight: 600; flex: 1 1 200px; }
+  .incident-history-meta{ font-size: 12px; color: var(--muted); }
+  .incident-history-timeline{ padding: 10px 14px 14px; border-top: 1px solid var(--line); }
+  .incident-history-timeline .incident-timeline{ margin-top: 0; }
 
   .hidden { display: none !important; }
 
