@@ -2,7 +2,39 @@ const REFRESH_MS = 10_000;
 const STORAGE_KEY_FILTER = "ewsmon_env_filter";
 const STORAGE_KEY_INCIDENT_TIMELINE_OPEN = "ewsmon_incident_timeline_open";
 const STORAGE_KEY_INCIDENT_HISTORY_OPEN = "ewsmon_incident_history_open";
+const STORAGE_KEY_THEME = "ewsmon_theme";
 const INCIDENT_MSG_TRUNCATE = 120;
+
+function getStoredTheme() {
+  try {
+    const v = localStorage.getItem(STORAGE_KEY_THEME);
+    if (v === "dark" || v === "light") return v;
+  } catch (_) {}
+  return "light";
+}
+
+function setStoredTheme(theme) {
+  try {
+    localStorage.setItem(STORAGE_KEY_THEME, theme);
+  } catch (_) {}
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+}
+
+function initThemeToggle() {
+  var themeToggle = document.getElementById("themeToggle");
+  if (!themeToggle) return;
+  themeToggle.addEventListener("click", function () {
+    var next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    setStoredTheme(next);
+    applyTheme(next);
+    themeToggle.setAttribute("aria-label", next === "dark" ? "Switch to dark mode" : "Switch to light mode");
+  });
+  var current = getStoredTheme();
+  themeToggle.setAttribute("aria-label", current === "dark" ? "Switch to light mode" : "Switch to dark mode");
+}
 
 /** Infer environment: "uat" if name contains "(UAT)" or url contains "certwebservices", else "prod" */
 function inferEnv(item) {
@@ -105,7 +137,7 @@ function rowHtml(item){
 
   return `
     <tr>
-      <td>
+      <td class="service-name">
         ${canView
           ? `<button type="button" class="link-like js-open-chart" data-target-id="${escapeHtml(String(id))}" data-target-name="${escapeHtml(String(name))}">${escapeHtml(display)}</button>`
           : escapeHtml(display)
@@ -165,11 +197,19 @@ function applyFilter() {
   const filter = getStoredFilter();
   const filtered = filterByEnv(lastFetchedItems, filter);
 
-  if (!filtered.length) {
-    rowsEl.innerHTML = `<tr><td colspan="10" class="muted">No ${filter === "all" ? "data" : filter.toUpperCase() + " endpoints"} to show.</td></tr>`;
-  } else {
-    rowsEl.innerHTML = filtered.map(rowHtml).join("");
+  rowsEl.style.opacity = "0.6";
+
+  function commit() {
+    if (!filtered.length) {
+      rowsEl.innerHTML = `<tr><td colspan="10" class="muted">No ${filter === "all" ? "data" : filter.toUpperCase() + " endpoints"} to show.</td></tr>`;
+    } else {
+      rowsEl.innerHTML = filtered.map(rowHtml).join("");
+    }
+    rowsEl.style.opacity = "1";
   }
+
+  const t = parseFloat(getComputedStyle(rowsEl).transitionDuration) * 1000 || 200;
+  setTimeout(commit, Math.min(t, 120));
 
   const { svcCount, upCount, downCount, degradedCount } = computeTopStats(filtered);
   document.getElementById("svcCount").textContent = String(svcCount);
@@ -178,7 +218,6 @@ function applyFilter() {
   document.getElementById("degradedCount").textContent = String(degradedCount);
   document.getElementById("degradedCount").className = "cardValue degraded";
 
-  // Update segment active state
   document.querySelectorAll(".segmented .segment").forEach((btn) => {
     const isActive = btn.getAttribute("data-filter") === filter;
     btn.classList.toggle("segment--active", isActive);
@@ -222,6 +261,7 @@ async function load(){
   }
 }
 
+initThemeToggle();
 document.getElementById("refreshBtn").addEventListener("click", load);
 
 // Segmented filter: persist selection and re-apply

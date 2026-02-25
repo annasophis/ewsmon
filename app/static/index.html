@@ -5,8 +5,15 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>EWS Monitoring</title>
 
+  <!-- Apply saved theme before paint to avoid flash -->
+  <script>
+    (function(){
+      var t = localStorage.getItem("ewsmon_theme");
+      document.documentElement.dataset.theme = (t === "dark" ? "dark" : "light");
+    })();
+  </script>
   <!-- cache-bust to avoid stale CSS/JS while iterating -->
-  <link rel="stylesheet" href="/static/style.css?v=5" />
+  <link rel="stylesheet" href="/static/style.css?v=6" />
 </head>
 <body>
   <header class="topbar">
@@ -25,6 +32,10 @@
         <button type="button" class="segment" data-filter="uat" aria-pressed="false">UAT</button>
       </div>
       <div class="pill" id="lastUpdated">Last updated: —</div>
+      <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode" title="Toggle dark/light mode">
+        <span class="theme-icon theme-icon-sun" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></span>
+        <span class="theme-icon theme-icon-moon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
+      </button>
       <button class="btn" id="refreshBtn">Refresh</button>
     </div>
   </header>
@@ -82,7 +93,7 @@
             </tr>
           </thead>
 
-          <tbody id="rows">
+          <tbody id="rows" class="table-rows-transition">
             <!-- ✅ colspan updated from 9 -> 10 -->
             <tr><td colspan="10" class="muted">Loading…</td></tr>
           </tbody>
@@ -169,6 +180,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <!-- cache-bust while iterating -->
-  <script src="/static/app.js?v=4"></script>
+  <script src="/static/app.js?v=5"></script>
 </body>
 </html>
