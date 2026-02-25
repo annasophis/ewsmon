@@ -206,6 +206,10 @@
     white-space:nowrap;
   }
   .table th{ font-size:12px; color:var(--muted); font-weight:700; }
+  .table th.sortable{ cursor:pointer; user-select:none; white-space:nowrap; }
+  .table th.sortable:hover{ color:var(--text); }
+  .table th .sort-arrow{ margin-left:4px; opacity:0.6; font-size:10px; }
+  .table th.sort-active .sort-arrow{ opacity:1; }
   .table td{ font-size:13px; }
   .table td.num, .table th.num{ text-align:right; }
   .table tbody tr{

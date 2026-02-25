@@ -78,17 +78,15 @@
         <table class="table">
           <thead>
             <tr>
-              <th>Service</th>
-              <th>Status</th>
-              <th>Last Checked</th>
-              <th class="num">Last (ms)</th>
-              <th class="num">HTTP</th>
-              <th class="num">Avg (Today)</th>
-              <th class="num">Avg (7d)</th>
-              <th class="num">Uptime (Today)</th>
-              <th class="num">Uptime (7d)</th>
-
-              <!-- ✅ NEW -->
+              <th class="sortable" data-sort="service" scope="col"><span class="th-label">Service</span><span class="sort-arrow" aria-hidden="true"></span></th>
+              <th class="sortable sort-active" data-sort="status" scope="col" aria-sort="ascending"><span class="th-label">Status</span><span class="sort-arrow" aria-hidden="true">↑</span></th>
+              <th class="sortable" data-sort="lastChecked" scope="col"><span class="th-label">Last Checked</span><span class="sort-arrow" aria-hidden="true"></span></th>
+              <th class="sortable num" data-sort="lastMs" scope="col"><span class="th-label">Last (ms)</span><span class="sort-arrow" aria-hidden="true"></span></th>
+              <th class="sortable num" data-sort="http" scope="col"><span class="th-label">HTTP</span><span class="sort-arrow" aria-hidden="true"></span></th>
+              <th class="sortable num" data-sort="avgToday" scope="col"><span class="th-label">Avg (Today)</span><span class="sort-arrow" aria-hidden="true"></span></th>
+              <th class="sortable num" data-sort="avg7d" scope="col"><span class="th-label">Avg (7d)</span><span class="sort-arrow" aria-hidden="true"></span></th>
+              <th class="sortable num" data-sort="uptimeToday" scope="col"><span class="th-label">Uptime (Today)</span><span class="sort-arrow" aria-hidden="true"></span></th>
+              <th class="sortable num" data-sort="uptime7d" scope="col"><span class="th-label">Uptime (7d)</span><span class="sort-arrow" aria-hidden="true"></span></th>
               <th style="width:90px;">Notes</th>
             </tr>
           </thead>

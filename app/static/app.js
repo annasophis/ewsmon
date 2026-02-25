@@ -191,25 +191,109 @@ async function fetchJson(url){
 }
 
 let lastFetchedItems = [];
+let sortColumn = "status";
+let sortDir = "asc"; // for status: asc = DOWN first, then Degraded, then UP
+
+/** Status rank for sorting: DOWN=0, Degraded=1, UP=2 */
+function getStatusRank(item) {
+  const isUp = !!pick(item, ["is_up", "ok", "up", "status_up"]);
+  const lastMs = Number(pick(item, ["last_ms", "duration_ms", "ms"]));
+  const degraded = isUp && !Number.isNaN(lastMs) && lastMs >= DEGRADED_MS;
+  if (!isUp) return 0;
+  return degraded ? 1 : 2;
+}
+
+function sortItems(items, column, dir) {
+  const mult = dir === "asc" ? 1 : -1;
+  return [...items].sort((a, b) => {
+    let cmp = 0;
+    switch (column) {
+      case "service": {
+        const na = (pick(a, ["name", "service_name"]) ?? "").toString();
+        const nb = (pick(b, ["name", "service_name"]) ?? "").toString();
+        cmp = na.localeCompare(nb, undefined, { sensitivity: "base" });
+        break;
+      }
+      case "status":
+        cmp = getStatusRank(a) - getStatusRank(b);
+        break;
+      case "lastChecked": {
+        const ta = new Date(pick(a, ["last_checked", "last_ts", "ts"]) || 0).getTime();
+        const tb = new Date(pick(b, ["last_checked", "last_ts", "ts"]) || 0).getTime();
+        cmp = ta - tb;
+        break;
+      }
+      case "lastMs": {
+        const va = Number(pick(a, ["last_ms", "duration_ms", "ms"])) || 0;
+        const vb = Number(pick(b, ["last_ms", "duration_ms", "ms"])) || 0;
+        cmp = va - vb;
+        break;
+      }
+      case "http": {
+        const va = Number(pick(a, ["http_status", "status_code", "last_status"])) || 0;
+        const vb = Number(pick(b, ["http_status", "status_code", "last_status"])) || 0;
+        cmp = va - vb;
+        break;
+      }
+      case "avgToday": {
+        const va = Number(pick(a, ["avg_today_ms", "avg_1d_ms", "avg_day_ms", "daily_avg_ms", "avg_ms"])) || 0;
+        const vb = Number(pick(b, ["avg_today_ms", "avg_1d_ms", "avg_day_ms", "daily_avg_ms", "avg_ms"])) || 0;
+        cmp = va - vb;
+        break;
+      }
+      case "avg7d": {
+        const va = Number(pick(a, ["avg_7d_ms", "avg_week_ms", "avg_7_days_ms"])) || 0;
+        const vb = Number(pick(b, ["avg_7d_ms", "avg_week_ms", "avg_7_days_ms"])) || 0;
+        cmp = va - vb;
+        break;
+      }
+      case "uptimeToday":
+      case "uptime7d": {
+        const key = column === "uptimeToday" ? "uptime_today" : "uptime_7d";
+        const va = Number(pick(a, [key, "uptime_1d", "uptime_1d_pct", "uptime_week", "uptime_7d_pct"])) || 0;
+        const vb = Number(pick(b, [key, "uptime_1d", "uptime_1d_pct", "uptime_week", "uptime_7d_pct"])) || 0;
+        cmp = va - vb;
+        break;
+      }
+      default:
+        cmp = 0;
+    }
+    return mult * (cmp || 0);
+  });
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll(".table thead th.sortable").forEach((th) => {
+    const col = th.getAttribute("data-sort");
+    const arrow = th.querySelector(".sort-arrow");
+    const isActive = col === sortColumn;
+    th.classList.toggle("sort-active", isActive);
+    th.setAttribute("aria-sort", isActive ? (sortDir === "asc" ? "ascending" : "descending") : "none");
+    if (arrow) arrow.textContent = isActive ? (sortDir === "asc" ? "↑" : "↓") : "";
+  });
+}
 
 function applyFilter() {
   const rowsEl = document.getElementById("rows");
   const filter = getStoredFilter();
   const filtered = filterByEnv(lastFetchedItems, filter);
+  const sorted = sortItems(filtered, sortColumn, sortDir);
 
   rowsEl.style.opacity = "0.6";
 
   function commit() {
-    if (!filtered.length) {
+    if (!sorted.length) {
       rowsEl.innerHTML = `<tr><td colspan="10" class="muted">No ${filter === "all" ? "data" : filter.toUpperCase() + " endpoints"} to show.</td></tr>`;
     } else {
-      rowsEl.innerHTML = filtered.map(rowHtml).join("");
+      rowsEl.innerHTML = sorted.map(rowHtml).join("");
     }
     rowsEl.style.opacity = "1";
   }
 
   const t = parseFloat(getComputedStyle(rowsEl).transitionDuration) * 1000 || 200;
   setTimeout(commit, Math.min(t, 120));
+
+  updateSortHeaders();
 
   const { svcCount, upCount, downCount, degradedCount } = computeTopStats(filtered);
   document.getElementById("svcCount").textContent = String(svcCount);
@@ -283,6 +367,21 @@ document.querySelectorAll(".segmented .segment").forEach((btn) => {
     btn.setAttribute("aria-pressed", isActive ? "true" : "false");
   });
 })();
+
+// Table column sort: click header to toggle asc/desc
+document.querySelectorAll(".table thead th.sortable").forEach((th) => {
+  th.addEventListener("click", () => {
+    const col = th.getAttribute("data-sort");
+    if (!col) return;
+    if (sortColumn === col) {
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+    } else {
+      sortColumn = col;
+      sortDir = "asc";
+    }
+    applyFilter();
+  });
+});
 
 // -------------------- Incident Updates --------------------
 function getIncidentTimelineOpen(id) {
