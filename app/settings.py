@@ -58,9 +58,7 @@ PROBE_RETENTION_DAYS = int(os.getenv("PROBE_RETENTION_DAYS", "14"))
 CLEANUP_EVERY_SECONDS = int(os.getenv("CLEANUP_EVERY_SECONDS", str(60*60)))  # 1 hour
 
 # ----------------------------
-# Admin / Incident auth
+# Admin auth (login page + session)
 # ----------------------------
-
-ADMIN_KEY = os.getenv("ADMIN_KEY", "")
-# For POST /api/incidents* when ENVIRONMENT != "dev"
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()

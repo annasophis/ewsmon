@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login — EWS Monitoring Admin</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #111833;
+      --line: rgba(255,255,255,.08);
+      --text: #e8ecff;
+      --muted: #a9b2d6;
+      --ok: #31d07f;
+      --bad: #ff4d5e;
+      --accent: rgba(124,156,255,.5);
+      --space-sm: 12px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, #070a14 0%, var(--bg) 100%);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-lg);
+    }
+    .login-card {
+      width: 100%;
+      max-width: 380px;
+      background: linear-gradient(180deg, rgba(17,24,51,.95) 0%, rgba(15,22,48,.85) 100%);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: var(--space-xl);
+      box-shadow: 0 20px 40px rgba(0,0,0,.3);
+    }
+    .login-card h1 {
+      margin: 0 0 var(--space-xs, 6px);
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+    .login-card .subtitle {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin: 0 0 var(--space-lg);
+    }
+    .form-group {
+      margin-bottom: var(--space-md);
+    }
+    .form-group label {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: rgba(25,34,72,.4);
+      color: var(--text);
+      font-size: 0.9375rem;
+    }
+    .form-group input::placeholder { color: var(--muted); opacity: .8; }
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(124,156,255,.15);
+    }
+    .btn-login {
+      width: 100%;
+      margin-top: var(--space-md);
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--accent);
+      background: rgba(124,156,255,.2);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 0.9375rem;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-login:hover { background: rgba(124,156,255,.35); }
+    .btn-login:disabled { opacity: .6; cursor: not-allowed; }
+    .error-msg {
+      font-size: 0.8125rem;
+      color: var(--bad);
+      margin-top: var(--space-sm);
+      min-height: 1.25rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <h1>EWS Monitoring</h1>
+    <p class="subtitle">Sign in to access the admin panel.</p>
+    <form id="loginForm" autocomplete="on">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" required autofocus />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+      </div>
+      <button type="submit" class="btn-login" id="submitBtn">Sign in</button>
+      <div class="error-msg" id="errorMsg" role="alert"></div>
+    </form>
+  </div>
+  <script>
+    const form = document.getElementById("loginForm");
+    const submitBtn = document.getElementById("submitBtn");
+    const errorMsg = document.getElementById("errorMsg");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorMsg.textContent = "";
+      submitBtn.disabled = true;
+
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+
+      try {
+        const res = await fetch("/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          errorMsg.textContent = data.detail || "Invalid username or password.";
+          submitBtn.disabled = false;
+          return;
+        }
+
+        if (data.token) {
+          localStorage.setItem("ewsmon_admin_token", data.token);
+          window.location.href = "/admin";
+          return;
+        }
+        errorMsg.textContent = "Login failed.";
+      } catch (err) {
+        errorMsg.textContent = "Network error. Please try again.";
+      }
+      submitBtn.disabled = false;
+    });
+  </script>
+</body>
+</html>

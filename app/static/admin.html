@@ -40,6 +40,11 @@
       border-bottom: 1px solid var(--line);
       background: rgba(7,10,20,.7);
       backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-md);
     }
     .admin-header h1 {
       margin: 0 0 var(--space-xs);
@@ -230,32 +235,62 @@
     .admin-table .cell-body { color: var(--muted); word-break: break-word; max-width: 320px; }
     .admin-table .cell-date { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
     .notes-empty { color: var(--muted); font-style: italic; font-size: 0.875rem; padding: var(--space-md); }
+
+    /* Toasts */
+    .toast-container {
+      position: fixed;
+      bottom: var(--space-lg);
+      right: var(--space-lg);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+      max-width: 360px;
+    }
+    .toast {
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 0.875rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,.4);
+      animation: toastIn 0.2s ease-out;
+    }
+    .toast.success { border-color: var(--ok); background: rgba(49,208,127,.12); }
+    .toast.error { border-color: var(--bad); background: rgba(255,77,94,.12); }
+    .toast.info { border-color: var(--accent); background: rgba(124,156,255,.1); }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Confirm modal */
+    .confirm-overlay {
+      position: fixed; inset: 0; z-index: 10000;
+      background: rgba(0,0,0,.6); backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center;
+      padding: var(--space-lg);
+    }
+    .confirm-modal {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: var(--space-lg);
+      max-width: 400px; width: 100%;
+    }
+    .confirm-modal p { margin: 0 0 var(--space-lg); color: var(--text); }
+    .confirm-modal .btn-group { margin-bottom: 0; }
   </style>
 </head>
 
 <body>
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
   <header class="admin-header">
-    <h1>EWS Monitoring — Admin</h1>
-    <p class="subtitle">Uses <code>x-admin-key</code> header. Key is stored only in this browser (localStorage).</p>
+    <div>
+      <h1>EWS Monitoring — Admin</h1>
+      <p class="subtitle">Manage banner, notes, and incident updates.</p>
+    </div>
+    <button type="button" id="logoutBtn" class="btn btn-secondary">Log out</button>
   </header>
 
   <main class="admin-wrap">
-    <section class="card">
-      <div class="card-header">
-        <h2 class="card-title">Admin Key</h2>
-      </div>
-      <div class="card-body">
-        <div class="form-group">
-          <label for="adminKey">x-admin-key</label>
-          <input id="adminKey" type="password" placeholder="Paste ADMIN_KEY here" />
-        </div>
-        <div class="btn-group">
-          <button id="saveKeyBtn" class="btn btn-primary">Save key</button>
-          <button id="clearKeyBtn" class="btn btn-secondary" type="button">Clear</button>
-        </div>
-      </div>
-    </section>
-
     <div class="row">
       <section class="card">
         <div class="card-header">
@@ -344,7 +379,7 @@
       <div class="card-header">
         <div>
           <h2 class="card-title">Incident Updates</h2>
-          <p class="card-desc">Create manual incident updates shown on the public dashboard. In non-dev, set ADMIN_TOKEN and use the same value as x-admin-key (or send X-Admin-Token).</p>
+          <p class="card-desc">Create manual incident updates shown on the public dashboard.</p>
         </div>
       </div>
       <div class="card-body">
@@ -423,22 +458,53 @@
 
     function $(id){ return document.getElementById(id); }
 
-    function getAdminKey(){
-      return localStorage.getItem("ewsmon_admin_key") || "";
+    const SESSION_KEY = "ewsmon_admin_token";
+    function getSessionToken(){ return localStorage.getItem(SESSION_KEY) || ""; }
+    function clearSession(){ localStorage.removeItem(SESSION_KEY); }
+
+    function toast(message, type = "success"){
+      const container = $("toastContainer");
+      const el = document.createElement("div");
+      el.className = "toast " + (type === "error" ? "error" : type === "info" ? "info" : "success");
+      el.setAttribute("role", "alert");
+      el.textContent = message;
+      container.appendChild(el);
+      setTimeout(() => el.remove(), 4000);
     }
-    function setAdminKey(v){
-      localStorage.setItem("ewsmon_admin_key", v);
-    }
-    function clearAdminKey(){
-      localStorage.removeItem("ewsmon_admin_key");
+
+    function showConfirm(message){
+      return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "confirm-overlay";
+        overlay.innerHTML = `
+          <div class="confirm-modal">
+            <p>${message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+            <div class="btn-group">
+              <button type="button" class="btn btn-primary" data-result="yes">Confirm</button>
+              <button type="button" class="btn btn-secondary" data-result="no">Cancel</button>
+            </div>
+          </div>`;
+        const remove = () => { overlay.remove(); };
+        overlay.querySelector("[data-result=yes]").addEventListener("click", () => { remove(); resolve(true); });
+        overlay.querySelector("[data-result=no]").addEventListener("click", () => { remove(); resolve(false); });
+        overlay.addEventListener("click", (e) => { if (e.target === overlay) { remove(); resolve(false); } });
+        document.body.appendChild(overlay);
+      });
     }
 
     async function fetchJson(url, opts={}){
-      const res = await fetch(url, {
-        cache: "no-store",
-        headers: { "Accept":"application/json", ...(opts.headers || {}) },
-        ...opts
-      });
+      const token = getSessionToken();
+      const headers = {
+        "Accept": "application/json",
+        ...(token ? { "Authorization": "Bearer " + token } : {}),
+        ...(opts.headers || {})
+      };
+      const res = await fetch(url, { cache: "no-store", headers, ...opts });
+      if (res.status === 401) {
+        clearSession();
+        window.location.href = "/login";
+        throw new Error("Session expired");
+      }
       if (!res.ok){
         const txt = await res.text().catch(() => "");
         throw new Error(`${url} -> ${res.status} ${txt}`);
@@ -447,17 +513,17 @@
     }
 
     function adminHeaders(extra={}){
-      const key = getAdminKey();
+      const token = getSessionToken();
       return {
-        "x-admin-key": key,
+        "Authorization": token ? "Bearer " + token : "",
         ...extra
       };
     }
     function incidentHeaders(extra={}){
-      const key = getAdminKey();
+      const token = getSessionToken();
       return {
         "Content-Type": "application/json",
-        "x-admin-token": key,
+        "Authorization": token ? "Bearer " + token : "",
         ...extra
       };
     }
@@ -534,7 +600,7 @@
       });
 
       await loadBanner();
-      alert(enabled ? "Banner saved ✅" : "Banner disabled ✅");
+      toast(enabled ? "Banner saved" : "Banner disabled");
     }
 
     $("bannerMessage").addEventListener("input", updateBannerPreview);
@@ -543,14 +609,14 @@
     async function addNote(){
       const targetId = $("targetSelect").value;
       if (!targetId){
-        alert("Select a target first.");
+        toast("Select a target first.", "error");
         return;
       }
 
       const title = $("noteTitle").value.trim();
       const body = $("noteBody").value.trim();
       if (!title || !body){
-        alert("Title + body are required.");
+        toast("Title and body are required.", "error");
         return;
       }
 
@@ -564,7 +630,7 @@
 
       $("noteTitle").value = "";
       $("noteBody").value = "";
-      alert("Note added ✅");
+      toast("Note added");
       await previewNotes();
     }
 
@@ -639,7 +705,7 @@
       const message = $("incidentMessage").value.trim();
       const affected_service = ($("incidentAffectedService") && $("incidentAffectedService").value.trim()) || null;
       if (!title || !message){
-        alert("Title and message are required.");
+        toast("Title and message are required.", "error");
         return;
       }
       await fetchJson(API.INCIDENTS_POST, {
@@ -650,7 +716,7 @@
       $("incidentTitle").value = "";
       if ($("incidentAffectedService")) $("incidentAffectedService").value = "";
       $("incidentMessage").value = "";
-      alert("Incident created ✅");
+      toast("Incident created");
       await loadIncidentList();
     }
 
@@ -659,11 +725,11 @@
       const status = ($("updateStatus") && $("updateStatus").value) || "";
       const message = ($("updateMessage") && $("updateMessage").value || "").trim();
       if (!incidentId){
-        alert("Select an incident.");
+        toast("Select an incident.", "error");
         return;
       }
       if (!message){
-        alert("Message is required for the update.");
+        toast("Message is required for the update.", "error");
         return;
       }
       await fetchJson(API.INCIDENT_ADD_UPDATE(incidentId), {
@@ -672,52 +738,51 @@
         body: JSON.stringify({ status, message })
       });
       if ($("updateMessage")) $("updateMessage").value = "";
-      alert("Update added ✅");
+      toast("Update added");
       await loadIncidentList();
     }
 
     async function resolveIncident(id){
-      if (!confirm("Mark this incident as resolved? It will be hidden from the current banner.")) return;
+      const ok = await showConfirm("Mark this incident as resolved? It will be hidden from the current banner.");
+      if (!ok) return;
       await fetchJson(API.INCIDENT_RESOLVE(id), {
         method: "POST",
         headers: incidentHeaders()
       });
-      alert("Incident resolved ✅");
+      toast("Incident resolved");
       await loadIncidentList();
     }
 
     // ---------- Wire up ----------
-    $("saveKeyBtn").addEventListener("click", () => {
-      setAdminKey($("adminKey").value.trim());
-      alert("Saved ✅");
-    });
-    $("clearKeyBtn").addEventListener("click", () => {
-      clearAdminKey();
-      $("adminKey").value = "";
-      alert("Cleared ✅");
+    $("logoutBtn").addEventListener("click", () => {
+      clearSession();
+      window.location.href = "/login";
     });
 
-    $("reloadTargetsBtn").addEventListener("click", () => loadTargets().catch(e => alert(e.message)));
-    $("previewNotesBtn").addEventListener("click", () => previewNotes().catch(e => alert(e.message)));
-    $("addNoteBtn").addEventListener("click", () => addNote().catch(e => alert(e.message)));
+    $("reloadTargetsBtn").addEventListener("click", () => loadTargets().catch(e => toast(e.message, "error")));
+    $("previewNotesBtn").addEventListener("click", () => previewNotes().catch(e => toast(e.message, "error")));
+    $("addNoteBtn").addEventListener("click", () => addNote().catch(e => toast(e.message, "error")));
 
-    $("reloadBannerBtn").addEventListener("click", () => loadBanner().catch(e => alert(e.message)));
-    $("saveBannerBtn").addEventListener("click", () => saveBanner(null).catch(e => alert(e.message)));
-    $("disableBannerBtn").addEventListener("click", () => saveBanner(false).catch(e => alert(e.message)));
+    $("reloadBannerBtn").addEventListener("click", () => loadBanner().catch(e => toast(e.message, "error")));
+    $("saveBannerBtn").addEventListener("click", () => saveBanner(null).catch(e => toast(e.message, "error")));
+    $("disableBannerBtn").addEventListener("click", () => saveBanner(false).catch(e => toast(e.message, "error")));
 
-    $("incidentSubmitBtn").addEventListener("click", () => createIncident().catch(e => alert(e.message)));
-    $("incidentReloadBtn").addEventListener("click", () => loadIncidentList().catch(e => alert(e.message)));
-    $("addUpdateBtn").addEventListener("click", () => addUpdate().catch(e => alert(e.message)));
+    $("incidentSubmitBtn").addEventListener("click", () => createIncident().catch(e => toast(e.message, "error")));
+    $("incidentReloadBtn").addEventListener("click", () => loadIncidentList().catch(e => toast(e.message, "error")));
+    $("addUpdateBtn").addEventListener("click", () => addUpdate().catch(e => toast(e.message, "error")));
 
     // ---------- Init ----------
     (async function init(){
-      $("adminKey").value = getAdminKey();
+      if (!getSessionToken()) {
+        window.location.href = "/login";
+        return;
+      }
 
       try { await loadTargets(); }
-      catch(e){ console.error(e); alert("Failed to load targets: " + e.message); }
+      catch(e){ console.error(e); toast("Failed to load targets: " + e.message, "error"); }
 
       try { await loadBanner(); }
-      catch(e){ console.error(e); alert("Failed to load banner: " + e.message); }
+      catch(e){ console.error(e); toast("Failed to load banner: " + e.message, "error"); }
 
       try { await loadIncidentList(); }
       catch(e){ console.error(e); }

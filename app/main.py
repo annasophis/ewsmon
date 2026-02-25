@@ -1,7 +1,7 @@
 # app/main.py
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import FastAPI, Depends
@@ -107,6 +107,11 @@ def home():
 @app.get("/admin", include_in_schema=False)
 def admin():
     return FileResponse(os.path.join(BASE_DIR, "static/admin.html"))
+
+
+@app.get("/login", include_in_schema=False)
+def login_page():
+    return FileResponse(os.path.join(BASE_DIR, "static/login.html"))
 # -----------------------------
 # API used by the frontend UI
 # -----------------------------
@@ -299,25 +304,61 @@ def api_notices(db: Session = Depends(get_db)):
         }
     }
 
-from fastapi import HTTPException, Request
-from app.settings import ADMIN_KEY, ADMIN_TOKEN, ENVIRONMENT
+import secrets
 
-def require_admin(request: Request):
-    if not ADMIN_KEY:
-        raise HTTPException(500, "ADMIN_KEY not set")
-    if request.headers.get("x-admin-key") != ADMIN_KEY:
+from fastapi import HTTPException, Request
+from app.settings import ADMIN_USERNAME, ADMIN_PASSWORD, ENVIRONMENT
+
+# In-memory session store: token -> {"username", "expires_at"}
+_admin_sessions: dict[str, dict] = {}
+SESSION_TTL = timedelta(days=7)
+
+
+def _get_bearer_token(request: Request) -> str | None:
+    auth = request.headers.get("Authorization")
+    if auth and auth.startswith("Bearer "):
+        return auth[7:].strip()
+    return None
+
+
+def require_admin(request: Request) -> None:
+    """Require valid admin session (Bearer token)."""
+    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+        raise HTTPException(500, "ADMIN_USERNAME and ADMIN_PASSWORD must be set")
+    token = _get_bearer_token(request)
+    if not token:
+        raise HTTPException(401, "Unauthorized")
+    session = _admin_sessions.get(token)
+    if not session or datetime.now(timezone.utc) > session["expires_at"]:
+        if token in _admin_sessions:
+            del _admin_sessions[token]
         raise HTTPException(401, "Unauthorized")
 
 
-def require_incident_admin(request: Request):
-    """When ENVIRONMENT != 'dev', require X-Admin-Token header."""
+def require_incident_admin(request: Request) -> None:
+    """When ENVIRONMENT != 'dev', require same admin session as require_admin."""
     if ENVIRONMENT == "dev":
         return
-    if not ADMIN_TOKEN:
-        raise HTTPException(500, "ADMIN_TOKEN not set for non-dev")
-    if request.headers.get("x-admin-token") != ADMIN_TOKEN:
-        raise HTTPException(401, "Unauthorized")
-    
+    require_admin(request)
+
+
+class LoginBody(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/admin/login")
+def api_admin_login(payload: LoginBody) -> dict[str, Any]:
+    """Validate credentials and return a session token (store in localStorage)."""
+    if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+        raise HTTPException(500, "Admin login not configured")
+    if payload.username != ADMIN_USERNAME or payload.password != ADMIN_PASSWORD:
+        raise HTTPException(401, "Invalid username or password")
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + SESSION_TTL
+    _admin_sessions[token] = {"username": payload.username, "expires_at": expires_at}
+    return {"token": token}
+
 
 class BannerUpdate(BaseModel):
     enabled: bool
