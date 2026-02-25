@@ -43,9 +43,12 @@ PUROLATOR_SHIPTRACK_ID_UAT = os.getenv("PUROLATOR_SHIPTRACK_ID_UAT", PUROLATOR_S
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 # ----------------------------
-# Alerts (future)
+# Alerts (Teams webhook)
 # ----------------------------
-ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "")
+# Teams Workflows webhook URL; if empty/unset, state-change alerts are disabled.
+TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL", "").strip() or os.getenv("ALERT_WEBHOOK_URL", "").strip()
+# Cooldown (seconds) per target to avoid spam when flapping. Default 300.
+ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
 ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
 
 # ----------------------------

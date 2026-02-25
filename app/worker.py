@@ -5,6 +5,7 @@ import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Tuple, Dict, Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 from sqlalchemy import select, text
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal, init_db
 from app.logger import configure_root_logging, get_logger
 from app.models import ApiTarget, ApiProbe
+from app import notifications
 import app.settings as settings
 
 log = get_logger(__name__)
@@ -21,6 +23,11 @@ log = get_logger(__name__)
 def _today_yyyy_mm_dd_utc() -> str:
     # timezone-aware UTC (no deprecation warning)
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _now_et_iso() -> str:
+    """Current time in America/Toronto (ET) for alert cards."""
+    return datetime.now(ZoneInfo("America/Toronto")).isoformat()
 
 
 def _is_uat_target(target: ApiTarget) -> bool:
@@ -681,6 +688,33 @@ def cleanup_old_probes(db: Session, days: int) -> int:
     return int(res.rowcount or 0)
 
 
+def get_previous_probe_state(db: Session, target_ids: list[int]) -> dict[int, bool]:
+    """
+    For each target_id, return the ok state of the most recent probe before this cycle.
+    Returns {target_id: ok}. Missing target_ids have no prior probe.
+    """
+    if not target_ids:
+        return {}
+    # PostgreSQL: DISTINCT ON (target_id) with ORDER BY target_id, ts DESC gives latest per target
+    rows = db.execute(
+        text(
+            """
+            SELECT DISTINCT ON (target_id) target_id, ok
+            FROM api_probe
+            WHERE target_id = ANY(:target_ids)
+            ORDER BY target_id, ts DESC
+            """
+        ),
+        {"target_ids": target_ids},
+    ).fetchall()
+    return {int(r[0]): bool(r[1]) for r in rows}
+
+
+def _is_up(probe: dict) -> bool:
+    """Current app: ok is True only for status 200. Treat that as UP."""
+    return bool(probe.get("ok"))
+
+
 async def main():
     configure_root_logging()
     init_db()
@@ -693,6 +727,10 @@ async def main():
 
     timeout = httpx.Timeout(timeout_seconds)
     last_cleanup = 0.0
+    # Cooldown only for DOWN (avoid spam when flapping); RECOVERED is sent as soon as stable.
+    _last_down_alert_ts: dict[int, float] = {}
+    # RECOVERED only after 2 consecutive UP probes (stable); DOWN->UP sets pending, next UP sends.
+    _pending_recovered: set[int] = set()
 
     log.info(
         "worker started",
@@ -712,8 +750,11 @@ async def main():
                 probes = await asyncio.gather(*tasks)
                 results = list(zip([t.id for t in targets], probes))
 
-                # Persist + cleanup using a fresh session (so we can reuse safely)
+                # Persist + cleanup + state-change alerts (same session for consistent prev state)
+                target_ids = [t.id for t in targets]
+                id_to_target = {t.id: t for t in targets}
                 with SessionLocal() as db:
+                    prev_state = get_previous_probe_state(db, target_ids)
                     inserted = persist_probes(db, results)
 
                     now = time.time()
@@ -724,6 +765,96 @@ async def main():
                             extra={"deleted": deleted, "retention_days": retention_days},
                         )
                         last_cleanup = now
+
+                    # State-change alerts: DOWN (with cooldown); RECOVERED only after 2 consecutive UPs (stable)
+                    webhook_url = getattr(settings, "TEAMS_WEBHOOK_URL", "") or ""
+                    cooldown_sec = int(getattr(settings, "ALERT_COOLDOWN_SECONDS", 300))
+                    for target_id, probe in results:
+                        current_up = _is_up(probe)
+                        prev_up = prev_state.get(target_id)
+                        if prev_up is None:
+                            continue
+                        target = id_to_target.get(target_id)
+                        if not target or not webhook_url:
+                            continue
+
+                        # Same state as last time: only check if we can send RECOVERED (2nd consecutive UP)
+                        if prev_up == current_up:
+                            if current_up and target_id in _pending_recovered:
+                                # Stable: two UPs in a row after a DOWN -> send RECOVERED
+                                _pending_recovered.discard(target_id)
+                                status_str = str(probe.get("status")) if probe.get("status") is not None else "timeout"
+                                latency = probe.get("ms")
+                                latency_str = f"{latency:.0f} ms" if latency is not None else "—"
+                                time_str = _now_et_iso()
+                                env = _env_label(target)
+                                facts = {
+                                    "Service": target.name,
+                                    "Environment": env,
+                                    "URL": target.url or "—",
+                                    "HTTP Status": status_str,
+                                    "Last Latency": latency_str,
+                                    "Time": time_str,
+                                }
+                                await notifications.send_teams_card(
+                                    f"✅ {target.name} RECOVERED",
+                                    "State change detected by EWS Monitoring (stable)",
+                                    facts,
+                                    webhook_url,
+                                )
+                                log.info(
+                                    "alert sent",
+                                    extra={
+                                        "target_id": target_id,
+                                        "prev_up": prev_up,
+                                        "current_up": current_up,
+                                        "status_code": probe.get("status"),
+                                        "latency_ms": probe.get("ms"),
+                                    },
+                                )
+                            continue
+
+                        # State flip
+                        if not prev_up and current_up:
+                            # DOWN -> UP: wait for one more UP before sending RECOVERED (stable)
+                            _pending_recovered.add(target_id)
+                            continue
+                        # UP -> DOWN: send DOWN (cooldown applies only here)
+                        _pending_recovered.discard(target_id)
+                        if (target_id in _last_down_alert_ts) and (
+                            now - _last_down_alert_ts[target_id] < cooldown_sec
+                        ):
+                            continue
+                        status_str = str(probe.get("status")) if probe.get("status") is not None else "timeout"
+                        latency = probe.get("ms")
+                        latency_str = f"{latency:.0f} ms" if latency is not None else "—"
+                        time_str = _now_et_iso()
+                        env = _env_label(target)
+                        facts = {
+                            "Service": target.name,
+                            "Environment": env,
+                            "URL": target.url or "—",
+                            "HTTP Status": status_str,
+                            "Last Latency": latency_str,
+                            "Time": time_str,
+                        }
+                        await notifications.send_teams_card(
+                            f"🚨 {target.name} DOWN",
+                            "State change detected by EWS Monitoring",
+                            facts,
+                            webhook_url,
+                        )
+                        _last_down_alert_ts[target_id] = now
+                        log.info(
+                            "alert sent",
+                            extra={
+                                "target_id": target_id,
+                                "prev_up": prev_up,
+                                "current_up": current_up,
+                                "status_code": probe.get("status"),
+                                "latency_ms": probe.get("ms"),
+                            },
+                        )
 
                 ok_count = sum(1 for _, r in results if r.get("ok"))
                 log.info(
