@@ -576,6 +576,9 @@
   max-height: 85vh !important;
   overflow: hidden !important;
 }
+.chart-modal-controls {
+  margin-bottom: 12px;
+}
 .chart-wrap {
   min-height: 280px;
   position: relative;

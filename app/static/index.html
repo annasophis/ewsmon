@@ -138,6 +138,14 @@
         <button type="button" class="modal-close" id="chartModalClose" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
+        <div class="chart-modal-controls">
+          <div class="segmented chart-range-segmented" role="group" aria-label="Time range">
+            <button type="button" class="segment segment--active" data-range="1h" aria-pressed="true">1h</button>
+            <button type="button" class="segment" data-range="6h" aria-pressed="false">6h</button>
+            <button type="button" class="segment" data-range="24h" aria-pressed="false">24h</button>
+            <button type="button" class="segment" data-range="7d" aria-pressed="false">7d</button>
+          </div>
+        </div>
         <div id="chartModalState" class="modal-state"></div>
         <div class="chart-wrap">
           <canvas id="chartCanvas" width="800" height="320"></canvas>
@@ -177,6 +185,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
 
-  <script src="/static/app.js?v=5"></script>
+  <script src="/static/app.js?v=6"></script>
 </body>
 </html>

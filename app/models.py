@@ -6,7 +6,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy import (
     String, Integer, Float, Boolean,
     DateTime, ForeignKey, Date, Text,
-    UniqueConstraint, func
+    UniqueConstraint, func, Index
 )
 
 class Base(DeclarativeBase):
@@ -26,6 +26,7 @@ class ApiTarget(Base):
 
 class ApiProbe(Base):
     __tablename__ = "api_probe"
+    __table_args__ = (Index("ix_api_probe_target_ts", "target_id", "ts"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     target_id: Mapped[int] = mapped_column(ForeignKey("api_target.id"), nullable=False)

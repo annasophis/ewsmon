@@ -719,8 +719,7 @@ setInterval(load, REFRESH_MS);
 
 // -------------------- Chart Modal (probe history) --------------------
 (function () {
-  const BUCKET_MINUTES = 5;
-  const PROBES_LIMIT = 300;
+  const DEFAULT_RANGE = "1h";
 
   const modal = document.getElementById("chartModal");
   const backdrop = document.getElementById("chartModalBackdrop");
@@ -731,10 +730,14 @@ setInterval(load, REFRESH_MS);
   const canvas = document.getElementById("chartCanvas");
   const closeBtn = document.getElementById("chartModalClose");
   const closeBtn2 = document.getElementById("chartModalClose2");
+  const rangeSegmented = document.querySelector(".chart-range-segmented");
 
   if (!modal || !canvas) return;
 
   let chartInstance = null;
+  let currentTargetId = null;
+  let currentTargetName = null;
+  let currentRange = DEFAULT_RANGE;
 
   function openChartModal() {
     modal.classList.remove("hidden");
@@ -756,45 +759,26 @@ setInterval(load, REFRESH_MS);
     if (e.key === "Escape") closeChartModal();
   }
 
-  /** Bucket probes into BUCKET_MINUTES intervals; return { labels, avgMs, successPct } */
-  function bucketProbes(probes) {
-    if (!probes || probes.length === 0) return { labels: [], avgMs: [], successPct: [] };
-
-    const bucketMs = BUCKET_MINUTES * 60 * 1000;
-    const byBucket = new Map(); // bucketStartTs -> { sumMs, count, okCount }
-
-    for (const p of probes) {
-      const ts = new Date(p.ts).getTime();
-      const bucketStart = Math.floor(ts / bucketMs) * bucketMs;
-      if (!byBucket.has(bucketStart)) byBucket.set(bucketStart, { sumMs: 0, count: 0, okCount: 0 });
-      const b = byBucket.get(bucketStart);
-      b.count += 1;
-      if (p.ok) b.okCount += 1;
-      const ms = p.duration_ms != null ? Number(p.duration_ms) : 0;
-      b.sumMs += ms;
-    }
-
-    const sorted = [...byBucket.entries()].sort((a, b) => a[0] - b[0]);
-    const labels = sorted.map(([ts]) => {
-      const d = new Date(ts);
-      return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-    });
-    const avgMs = sorted.map(([, b]) => (b.count ? b.sumMs / b.count : null));
-    const successPct = sorted.map(([, b]) => (b.count ? (b.okCount / b.count) * 100 : null));
-
-    return { labels, avgMs, successPct };
+  function getBucketLabel(bucketTimestamp) {
+    if (!bucketTimestamp) return "";
+    const d = new Date(bucketTimestamp);
+    return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
-  function renderChart(labels, avgMs) {
+  function renderChart(buckets) {
     if (chartInstance) chartInstance.destroy();
 
+    const labels = buckets.map((b) => getBucketLabel(b.timestamp));
+    const avgMs = buckets.map((b) => (b.avg_duration_ms != null ? b.avg_duration_ms : null));
+
+    const bucketLabel = currentRange === "1h" ? "5 min" : currentRange === "6h" ? "30 min" : currentRange === "24h" ? "1h" : "6h";
     const ctx = canvas.getContext("2d");
     chartInstance = new Chart(ctx, {
       type: "line",
       data: {
         labels,
         datasets: [{
-          label: `Avg response time (${BUCKET_MINUTES} min buckets)`,
+          label: `Avg response time (${bucketLabel} buckets)`,
           data: avgMs,
           borderColor: "rgb(124, 156, 255)",
           backgroundColor: "rgba(124, 156, 255, 0.1)",
@@ -826,46 +810,79 @@ setInterval(load, REFRESH_MS);
     });
   }
 
-  function setSummary(probes) {
-    if (!probes || probes.length === 0) {
+  function setSummaryFromApi(summary) {
+    if (!summary || summary.total_probes === 0) {
       summaryEl.textContent = "No probe data in this range.";
       return;
     }
-    const withMs = probes.filter(p => p.duration_ms != null);
-    const okCount = probes.filter(p => p.ok).length;
-    const avg = withMs.length ? withMs.reduce((s, p) => s + p.duration_ms, 0) / withMs.length : 0;
-    const sorted = [...withMs].sort((a, b) => a.duration_ms - b.duration_ms);
-    const p95 = sorted.length ? sorted[Math.floor(sorted.length * 0.95)]?.duration_ms : null;
-    summaryEl.textContent = `Probes: ${probes.length} • Success: ${okCount}/${probes.length} (${((okCount / probes.length) * 100).toFixed(1)}%) • Avg: ${avg.toFixed(0)} ms${p95 != null ? ` • P95: ${p95.toFixed(0)} ms` : ""}`;
+    const s = summary;
+    const pct = s.total_probes ? ((s.success_count / s.total_probes) * 100).toFixed(1) : "0";
+    const avgStr = s.avg_ms != null ? s.avg_ms.toFixed(0) : "—";
+    const p95Str = s.p95_ms != null ? s.p95_ms.toFixed(0) : "";
+    summaryEl.textContent = `Probes: ${s.total_probes} • Success: ${s.success_count}/${s.total_probes} (${pct}%) • Avg: ${avgStr} ms${p95Str ? " • P95: " + p95Str + " ms" : ""}`;
+  }
+
+  function updateRangeSegmentedUI(selectedRange) {
+    if (!rangeSegmented) return;
+    rangeSegmented.querySelectorAll(".segment").forEach((btn) => {
+      const isActive = btn.getAttribute("data-range") === selectedRange;
+      btn.classList.toggle("segment--active", isActive);
+      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  }
+
+  async function fetchAndRenderHistory(targetId, range) {
+    if (!targetId) return;
+    stateEl.textContent = "Loading…";
+    try {
+      const res = await fetch(`/api/targets/${encodeURIComponent(targetId)}/history?range=${encodeURIComponent(range)}`);
+      if (!res.ok) throw new Error(`History ${res.status}`);
+      const data = await res.json();
+      const buckets = data.buckets || [];
+      const summary = data.summary || {};
+      stateEl.textContent = "";
+
+      if (buckets.length) {
+        renderChart(buckets);
+      } else {
+        stateEl.textContent = "No probe data yet for this endpoint.";
+        if (chartInstance) {
+          chartInstance.destroy();
+          chartInstance = null;
+        }
+      }
+      setSummaryFromApi(summary);
+    } catch (err) {
+      console.error(err);
+      stateEl.textContent = "Could not load history. Check console.";
+    }
   }
 
   async function showChartForTarget(targetId, targetName) {
     const display = displayName(targetName || "");
     titleEl.textContent = "Probe history";
     subtitleEl.textContent = display ? `${display} (id: ${targetId})` : `Target id: ${targetId}`;
-    stateEl.textContent = "Loading…";
+    currentTargetId = targetId;
+    currentTargetName = targetName;
+    currentRange = DEFAULT_RANGE;
+    updateRangeSegmentedUI(currentRange);
     summaryEl.textContent = "";
     if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
     openChartModal();
 
-    try {
-      const res = await fetch(`/api/targets/${encodeURIComponent(targetId)}/probes?limit=${PROBES_LIMIT}`);
-      if (!res.ok) throw new Error(`Probes ${res.status}`);
-      const data = await res.json();
-      const probes = data.probes || [];
-      stateEl.textContent = "";
+    await fetchAndRenderHistory(targetId, currentRange);
+  }
 
-      const { labels, avgMs } = bucketProbes(probes);
-      if (labels.length) {
-        renderChart(labels, avgMs);
-      } else {
-        stateEl.textContent = "No probe data yet for this endpoint.";
-      }
-      setSummary(probes);
-    } catch (err) {
-      console.error(err);
-      stateEl.textContent = "Could not load probes. Check console.";
-    }
+  if (rangeSegmented) {
+    rangeSegmented.addEventListener("click", (e) => {
+      const btn = e.target.closest(".segment[data-range]");
+      if (!btn || !currentTargetId) return;
+      const range = btn.getAttribute("data-range");
+      if (!range) return;
+      currentRange = range;
+      updateRangeSegmentedUI(currentRange);
+      fetchAndRenderHistory(currentTargetId, currentRange);
+    });
   }
 
   backdrop.addEventListener("click", closeChartModal);

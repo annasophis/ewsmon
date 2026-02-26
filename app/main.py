@@ -54,6 +54,8 @@ def on_startup():
     init_db()
 
     with SessionLocal() as db:
+        db.execute(text("CREATE INDEX IF NOT EXISTS ix_api_probe_target_ts ON api_probe(target_id, ts)"))
+        db.commit()
         seed_targets(db)
 
         # Ensure a banner row exists (id=1)
@@ -286,6 +288,93 @@ def api_target_probes(
     # return oldest->newest (nice for charting)
     probes = list(reversed([dict(r) for r in rows]))
     return {"target_id": target_id, "count": len(probes), "probes": probes}
+
+
+# Range -> (interval for filter, epoch step for bucket: 300=5m, 1800=30m, 3600=1h, 21600=6h)
+HISTORY_RANGE_CONFIG = {
+    "1h": ("1 hour", 300),
+    "6h": ("6 hours", 1800),
+    "24h": ("24 hours", 3600),
+    "7d": ("7 days", 21600),
+}
+
+
+@app.get("/api/targets/{target_id}/history")
+def api_target_history(
+    target_id: int,
+    range: str = "1h",
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Time-bucketed probe history for a target with summary stats.
+    range: 1h (5 min buckets), 6h (30 min), 24h (1h), 7d (6h). Default 1h.
+    """
+    if range not in HISTORY_RANGE_CONFIG:
+        raise HTTPException(400, "range must be one of: 1h, 6h, 24h, 7d")
+    interval_str, epoch_step = HISTORY_RANGE_CONFIG[range]
+
+    # Buckets: bucket_ts = to_timestamp(floor(extract(epoch from ts) / step) * step)
+    # interval_str is from HISTORY_RANGE_CONFIG only (no user string injection)
+    bucket_sql = text(
+        f"""
+        SELECT
+          to_timestamp(floor(extract(epoch from ts) / :epoch_step) * :epoch_step) AT TIME ZONE 'UTC' AS timestamp,
+          avg(duration_ms)::float AS avg_duration_ms,
+          count(*)::int AS count,
+          sum(case when ok then 1 else 0 end)::int AS success_count
+        FROM api_probe
+        WHERE target_id = :target_id
+          AND ts >= now() - interval '{interval_str}'
+        GROUP BY 1
+        ORDER BY 1
+        """
+    )
+    rows = db.execute(
+        bucket_sql,
+        {"target_id": target_id, "epoch_step": epoch_step},
+    ).mappings().all()
+
+    buckets = [
+        {
+            "timestamp": r["timestamp"].isoformat() if r["timestamp"] else None,
+            "avg_duration_ms": round(float(r["avg_duration_ms"]), 2) if r["avg_duration_ms"] is not None else None,
+            "count": r["count"],
+            "success_count": r["success_count"],
+        }
+        for r in rows
+    ]
+
+    # Summary: total_probes, success_count, avg_ms, p95_ms
+    summary_sql = text(
+        f"""
+        SELECT
+          count(*)::int AS total_probes,
+          sum(case when ok then 1 else 0 end)::int AS success_count,
+          avg(duration_ms)::float AS avg_ms,
+          percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms)::float AS p95_ms
+        FROM api_probe
+        WHERE target_id = :target_id
+          AND ts >= now() - interval '{interval_str}'
+        """
+    )
+    sum_row = db.execute(
+        summary_sql,
+        {"target_id": target_id},
+    ).mappings().first()
+
+    summary = {
+        "total_probes": sum_row["total_probes"] or 0,
+        "success_count": sum_row["success_count"] or 0,
+        "avg_ms": round(float(sum_row["avg_ms"]), 2) if sum_row["avg_ms"] is not None else None,
+        "p95_ms": round(float(sum_row["p95_ms"]), 2) if sum_row["p95_ms"] is not None else None,
+    }
+
+    return {
+        "target_id": target_id,
+        "range": range,
+        "buckets": buckets,
+        "summary": summary,
+    }
 
 @app.get("/api/notices")
 def api_notices(db: Session = Depends(get_db)):
