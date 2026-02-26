@@ -579,7 +579,7 @@
   // ─── Polling ─────────────────────────────────────────────────────────────────
   async function fetchEvents() {
     try {
-      const res = await fetch('/webhook-test/webhook-test/events');
+      const res = await fetch('/webhook-test/events');
       if (!res.ok) return;
       const data = await res.json();
       if (data.events && data.events.length !== events.length) {
@@ -655,7 +655,7 @@
   }
 
   function clearEvents() {
-    fetch('/webhook-test/webhook-test/clear', { method: 'POST' }).then(() => {
+    fetch('/webhook-test/clear', { method: 'POST' }).then(() => {
       events = [];
       renderEvents();
       updateStats();
