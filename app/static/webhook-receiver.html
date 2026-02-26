@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SUPER DUPER EWS WEBHOOK RECEIVER</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #080c10;
+      --surface: #0d1117;
+      --border: #1e2a38;
+      --accent: #00d4ff;
+      --accent2: #ff4757;
+      --accent3: #2ed573;
+      --accent-warn: #ffa502;
+      --text: #e6edf3;
+      --muted: #4d6177;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Syne', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 40px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .brand h1 {
+      font-family: var(--sans);
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+
+    .brand h1 span {
+      color: var(--accent);
+    }
+
+    .brand p {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+
+    .pill .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent3);
+      box-shadow: 0 0 8px var(--accent3);
+      animation: pulse 2s infinite;
+    }
+
+    .pill .dot.inactive {
+      background: var(--muted);
+      box-shadow: none;
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Endpoint box */
+    .endpoint-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .endpoint-label {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .endpoint-url {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--accent);
+      background: rgba(0,212,255,0.05);
+      border: 1px solid rgba(0,212,255,0.15);
+      border-radius: 6px;
+      padding: 8px 12px;
+      word-break: break-all;
+      cursor: pointer;
+      transition: background 0.2s;
+      min-width: 0;
+    }
+
+    .endpoint-url:hover {
+      background: rgba(0,212,255,0.1);
+    }
+
+    .copy-btn {
+      background: rgba(0,212,255,0.1);
+      border: 1px solid rgba(0,212,255,0.3);
+      color: var(--accent);
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-family: var(--mono);
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+      letter-spacing: 0.5px;
+    }
+
+    .copy-btn:hover {
+      background: rgba(0,212,255,0.2);
+    }
+
+    .copy-btn.copied {
+      background: rgba(46,213,115,0.1);
+      border-color: rgba(46,213,115,0.3);
+      color: var(--accent3);
+    }
+
+    /* Stats row */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-family: var(--sans);
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .stat-value.down { color: var(--accent2); }
+    .stat-value.up { color: var(--accent3); }
+    .stat-value.total { color: var(--accent); }
+
+    /* Events panel */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+
+    .panel-title {
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.3px;
+    }
+
+    .clear-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-family: var(--mono);
+      font-size: 10px;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: all 0.2s;
+    }
+
+    .clear-btn:hover {
+      border-color: var(--accent2);
+      color: var(--accent2);
+    }
+
+    /* Empty state */
+    .empty {
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty-icon {
+      font-size: 40px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+
+    .empty p {
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* Event list */
+    #eventList {
+      max-height: 600px;
+      overflow-y: auto;
+    }
+
+    #eventList::-webkit-scrollbar { width: 4px; }
+    #eventList::-webkit-scrollbar-track { background: transparent; }
+    #eventList::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Event item */
+    .event-item {
+      border-bottom: 1px solid var(--border);
+      animation: slideIn 0.3s ease;
+    }
+
+    .event-item:last-child { border-bottom: none; }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .event-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      cursor: pointer;
+      transition: background 0.15s;
+      flex-wrap: wrap;
+    }
+
+    .event-header:hover { background: rgba(255,255,255,0.02); }
+
+    .event-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .event-badge.down {
+      background: rgba(255,71,87,0.15);
+      color: var(--accent2);
+      border: 1px solid rgba(255,71,87,0.3);
+    }
+
+    .event-badge.up {
+      background: rgba(46,213,115,0.15);
+      color: var(--accent3);
+      border: 1px solid rgba(46,213,115,0.3);
+    }
+
+    .event-badge.incident {
+      background: rgba(255,165,2,0.15);
+      color: var(--accent-warn);
+      border: 1px solid rgba(255,165,2,0.3);
+    }
+
+    .event-badge.maintenance {
+      background: rgba(0,212,255,0.15);
+      color: var(--accent);
+      border: 1px solid rgba(0,212,255,0.3);
+    }
+
+    .event-service {
+      font-size: 13px;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .event-env {
+      font-size: 10px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      white-space: nowrap;
+    }
+
+    .event-time {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .expand-icon {
+      font-size: 10px;
+      color: var(--muted);
+      transition: transform 0.2s;
+      margin-left: auto;
+    }
+
+    .event-item.open .expand-icon { transform: rotate(180deg); }
+
+    /* Payload */
+    .event-payload {
+      display: none;
+      padding: 0 20px 16px;
+    }
+
+    .event-item.open .event-payload { display: block; }
+
+    .payload-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .payload-field {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+    }
+
+    .payload-key {
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .payload-val {
+      font-size: 12px;
+      color: var(--text);
+      word-break: break-all;
+    }
+
+    .payload-raw {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 11px;
+      color: var(--muted);
+      overflow-x: auto;
+      white-space: pre;
+      line-height: 1.6;
+    }
+
+    .sig-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: rgba(46,213,115,0.05);
+      border: 1px solid rgba(46,213,115,0.15);
+      border-radius: 6px;
+      font-size: 10px;
+      color: var(--accent3);
+      word-break: break-all;
+    }
+
+    .sig-label {
+      white-space: nowrap;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    /* Notification toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 100;
+      animation: toastIn 0.3s ease;
+      max-width: 320px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .toast.hide { animation: toastOut 0.3s ease forwards; }
+
+    @keyframes toastOut {
+      to { opacity: 0; transform: translateY(12px); }
+    }
+
+    /* Scrollbar */
+    * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>SUPER DUPER Webhook <span>Receiver</span></h1>
+      <p>EWS MONITORING · EVENT INSPECTOR</p>
+    </div>
+    <div class="status-bar">
+      <div class="pill">
+        <div class="dot" id="statusDot"></div>
+        <span id="statusText">LISTENING</span>
+      </div>
+      <div class="pill">Last: <span id="lastReceived" style="color:var(--text);margin-left:4px">—</span></div>
+    </div>
+  </header>
+
+  <div class="endpoint-box">
+    <span class="endpoint-label">POST endpoint</span>
+    <div class="endpoint-url" id="endpointUrl" onclick="copyEndpoint()">Loading...</div>
+    <button class="copy-btn" id="copyBtn" onclick="copyEndpoint()">COPY URL</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Total Received</div>
+      <div class="stat-value total" id="statTotal">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">DOWN Events</div>
+      <div class="stat-value down" id="statDown">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">UP Events</div>
+      <div class="stat-value up" id="statUp">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Other Events</div>
+      <div class="stat-value" id="statOther">0</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Incoming Events</div>
+      <button class="clear-btn" onclick="clearEvents()">CLEAR ALL</button>
+    </div>
+    <div id="eventList">
+      <div class="empty">
+        <div class="empty-icon">⚡</div>
+        <p>Waiting for webhook events...<br>Register this URL</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ─── State ───────────────────────────────────────────────────────────────────
+  let events = [];
+  let stats = { total: 0, down: 0, up: 0, other: 0 };
+  let pollInterval = null;
+
+  // ─── Endpoint URL ────────────────────────────────────────────────────────────
+  function getEndpointUrl() {
+    return window.location.origin + '/webhook';
+  }
+
+  document.getElementById('endpointUrl').textContent = getEndpointUrl();
+
+  function copyEndpoint() {
+    navigator.clipboard.writeText(getEndpointUrl()).then(() => {
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = 'COPIED!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = 'COPY URL';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+
+  // ─── Polling ─────────────────────────────────────────────────────────────────
+  async function fetchEvents() {
+    try {
+      const res = await fetch('/webhook-test/webhook-test/events');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.events && data.events.length !== events.length) {
+        const newCount = data.events.length - events.length;
+        events = data.events;
+        renderEvents();
+        updateStats();
+        if (newCount > 0) {
+          const latest = events[0];
+          showToast(latest);
+          document.getElementById('lastReceived').textContent = formatTime(latest.received_at);
+        }
+      }
+    } catch (e) {
+      // server might not be running yet
+    }
+  }
+
+  // ─── Render ──────────────────────────────────────────────────────────────────
+  function renderEvents() {
+    const list = document.getElementById('eventList');
+    if (events.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="empty-icon">⚡</div><p>Waiting for webhook events...<br>Register this URL as a subscription in EWS Monitoring.</p></div>`;
+      return;
+    }
+
+    list.innerHTML = events.map((ev, i) => {
+      const p = ev.payload || {};
+      const type = (p.event_type || 'unknown').toLowerCase();
+      const badgeClass = ['down','up','incident','maintenance'].includes(type) ? type : 'incident';
+
+      return `
+        <div class="event-item" id="ev-${i}" onclick="toggleEvent(${i})">
+          <div class="event-header">
+            <span class="event-badge ${badgeClass}">${type.toUpperCase()}</span>
+            <span class="event-service">${p.service || '—'}</span>
+            <span class="event-env">${p.environment || '—'}</span>
+            <span class="event-time">${formatTime(ev.received_at)}</span>
+            <span class="expand-icon">▼</span>
+          </div>
+          <div class="event-payload">
+            <div class="payload-grid">
+              ${p.http_status ? `<div class="payload-field"><div class="payload-key">HTTP Status</div><div class="payload-val">${p.http_status}</div></div>` : ''}
+              ${p.last_latency_ms != null ? `<div class="payload-field"><div class="payload-key">Latency</div><div class="payload-val">${typeof p.last_latency_ms === 'number' ? p.last_latency_ms.toFixed(2) + ' ms' : p.last_latency_ms}</div></div>` : ''}
+              ${p.time ? `<div class="payload-field"><div class="payload-key">Event Time</div><div class="payload-val">${p.time}</div></div>` : ''}
+              ${p.url ? `<div class="payload-field"><div class="payload-key">URL</div><div class="payload-val" style="font-size:10px">${p.url}</div></div>` : ''}
+            </div>
+            <div class="payload-raw">${JSON.stringify(p, null, 2)}</div>
+            ${ev.signature ? `<div class="sig-row"><span class="sig-label">SIG</span><span>${ev.signature}</span></div>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function toggleEvent(i) {
+    const el = document.getElementById('ev-' + i);
+    el.classList.toggle('open');
+  }
+
+  function updateStats() {
+    stats = { total: 0, down: 0, up: 0, other: 0 };
+    events.forEach(ev => {
+      stats.total++;
+      const type = (ev.payload?.event_type || '').toLowerCase();
+      if (type === 'down') stats.down++;
+      else if (type === 'up') stats.up++;
+      else stats.other++;
+    });
+    document.getElementById('statTotal').textContent = stats.total;
+    document.getElementById('statDown').textContent = stats.down;
+    document.getElementById('statUp').textContent = stats.up;
+    document.getElementById('statOther').textContent = stats.other;
+  }
+
+  function clearEvents() {
+    fetch('/webhook-test/webhook-test/clear', { method: 'POST' }).then(() => {
+      events = [];
+      renderEvents();
+      updateStats();
+      document.getElementById('lastReceived').textContent = '—';
+    });
+  }
+
+  // ─── Toast ───────────────────────────────────────────────────────────────────
+  function showToast(ev) {
+    const p = ev.payload || {};
+    const type = (p.event_type || 'unknown').toUpperCase();
+    const colors = { DOWN: '#ff4757', UP: '#2ed573', INCIDENT: '#ffa502', MAINTENANCE: '#00d4ff' };
+    const color = colors[type] || '#e6edf3';
+
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `<span style="color:${color};font-weight:700">${type}</span><span>${p.service || 'Unknown service'}</span>`;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.classList.add('hide');
+      setTimeout(() => toast.remove(), 300);
+    }, 4000);
+  }
+
+  // ─── Utils ───────────────────────────────────────────────────────────────────
+  function formatTime(iso) {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString();
+    } catch { return iso; }
+  }
+
+  // ─── Init ────────────────────────────────────────────────────────────────────
+  fetchEvents();
+  pollInterval = setInterval(fetchEvents, 2000);
+</script>
+
+
+</body>
+</html>

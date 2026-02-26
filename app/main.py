@@ -110,6 +110,10 @@ def home():
 def admin():
     return FileResponse(os.path.join(BASE_DIR, "static/admin.html"))
 
+@app.get("/webhook-receiver", include_in_schema=False)
+def webhook_receiver():
+    return FileResponse(os.path.join(BASE_DIR, "static/webhook-receiver.html"))
+
 
 @app.get("/login", include_in_schema=False)
 def login_page():
@@ -896,3 +900,30 @@ def api_admin_webhooks_delete(
     db.delete(row)
     db.commit()
     return {"ok": True}
+
+    # webhook-test endpoints
+_test_events = []
+
+@app.post("/webhook-test/receive")
+async def webhook_test_receive(request: Request):
+    body = await request.body()
+    payload = json.loads(body) if body else {}
+    _test_events.insert(0, {
+        "received_at": datetime.now(timezone.utc).isoformat(),
+        "payload": payload,
+        "signature": request.headers.get("x-webhook-signature", ""),
+    })
+    return {"ok": True}
+
+@app.get("/webhook-test/events")
+async def webhook_test_events():
+    return {"events": _test_events}
+
+@app.post("/webhook-test/clear")
+async def webhook_test_clear():
+    _test_events.clear()
+    return {"ok": True}
+
+@app.get("/webhook-test", include_in_schema=False)
+async def webhook_test_page():
+    return FileResponse(os.path.join(BASE_DIR, "static/webhook-receiver.html"))
