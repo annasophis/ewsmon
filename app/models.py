@@ -102,3 +102,15 @@ class IncidentUpdate(Base):
 
     parent: Mapped["IncidentUpdate | None"] = relationship(remote_side="IncidentUpdate.id", back_populates="updates")
     updates: Mapped[list["IncidentUpdate"]] = relationship(back_populates="parent", cascade="all, delete-orphan")
+
+
+class WebhookSubscription(Base):
+    __tablename__ = "webhook_subscription"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    events: Mapped[str] = mapped_column(String(500), nullable=False)  # comma-separated: up, down, incident, maintenance
+    secret: Mapped[str] = mapped_column(String(100), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

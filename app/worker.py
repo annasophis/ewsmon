@@ -2,18 +2,22 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
+import hashlib
+import json
 import time
 from datetime import datetime, timezone
 from typing import Tuple, Dict, Optional
 from zoneinfo import ZoneInfo
 
 import httpx
+import requests
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, init_db
 from app.logger import configure_root_logging, get_logger
-from app.models import ApiTarget, ApiProbe
+from app.models import ApiTarget, ApiProbe, WebhookSubscription
 from app import notifications
 import app.settings as settings
 
@@ -710,6 +714,56 @@ def get_previous_probe_state(db: Session, target_ids: list[int]) -> dict[int, bo
     return {int(r[0]): bool(r[1]) for r in rows}
 
 
+WEBHOOK_REQUEST_TIMEOUT = 5
+
+
+def fire_customer_webhooks(event_type: str, payload: dict) -> None:
+    """
+    POST payload to all active webhook subscriptions that subscribe to event_type.
+    event_type is one of: up, down, incident, maintenance.
+    Sends Content-Type: application/json and X-Webhook-Signature (HMAC-SHA256 of JSON body).
+    Uses requests with 5s timeout; logs success/failure, does not raise.
+    """
+    with SessionLocal() as db:
+        subs = db.query(WebhookSubscription).filter(WebhookSubscription.active == True).all()
+        log.info("fire_customer_webhooks called", extra={"event_type": event_type, "subs_found": len(subs)})
+
+    subscribed = [
+        s for s in subs
+        if event_type in [e.strip() for e in (s.events or "").split(",") if e.strip()]
+    ]
+    if not subscribed:
+        return
+    body = json.dumps(payload).encode("utf-8")
+    for sub in subscribed:
+        try:
+            sig = hmac.new(
+                sub.secret.encode("utf-8"),
+                body,
+                hashlib.sha256,
+            ).hexdigest()
+            headers = {
+                "Content-Type": "application/json",
+                "X-Webhook-Signature": f"sha256={sig}",
+            }
+            r = requests.post(sub.url, data=body, headers=headers, timeout=WEBHOOK_REQUEST_TIMEOUT)
+            if r.ok:
+                log.info(
+                    "webhook delivered",
+                    extra={"webhook_id": sub.id, "event_type": event_type, "status_code": r.status_code},
+                )
+            else:
+                log.warning(
+                    "webhook delivery failed",
+                    extra={"webhook_id": sub.id, "event_type": event_type, "status_code": r.status_code, "response": (r.text or "")[:200]},
+                )
+        except Exception as e:
+            log.warning(
+                "webhook delivery error",
+                extra={"webhook_id": sub.id, "event_type": event_type, "error": str(e), "error_type": type(e).__name__},
+            )
+
+
 def _is_up(probe: dict) -> bool:
     """Current app: ok is True only for status 200. Treat that as UP."""
     return bool(probe.get("ok"))
@@ -802,6 +856,16 @@ async def main():
                                     facts,
                                     webhook_url,
                                 )
+                                webhook_payload = {
+                                    "event_type": "up",
+                                    "service": target.name,
+                                    "environment": env,
+                                    "url": target.url or "",
+                                    "http_status": status_str,
+                                    "last_latency_ms": probe.get("ms"),
+                                    "time": time_str,
+                                }
+                                await asyncio.to_thread(fire_customer_webhooks, "up", webhook_payload)
                                 log.info(
                                     "alert sent",
                                     extra={
@@ -844,6 +908,18 @@ async def main():
                             facts,
                             webhook_url,
                         )
+                        log.info("about to fire customer webhooks", extra={"target_id": target_id, "event_type": "down"})
+
+                        webhook_payload = {
+                            "event_type": "down",
+                            "service": target.name,
+                            "environment": env,
+                            "url": target.url or "",
+                            "http_status": status_str,
+                            "last_latency_ms": probe.get("ms"),
+                            "time": time_str,
+                        }
+                        await asyncio.to_thread(fire_customer_webhooks, "down", webhook_payload)
                         _last_down_alert_ts[target_id] = now
                         log.info(
                             "alert sent",

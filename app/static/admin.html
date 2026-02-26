@@ -276,6 +276,33 @@
     }
     .confirm-modal p { margin: 0 0 var(--space-lg); color: var(--text); }
     .confirm-modal .btn-group { margin-bottom: 0; }
+
+    /* Modal (webhook create / secret) */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 10000;
+      background: rgba(0,0,0,.6); backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center;
+      padding: var(--space-lg);
+    }
+    .modal {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: var(--space-lg);
+      max-width: 480px; width: 100%;
+    }
+    .modal h3 { margin: 0 0 var(--space-md); font-size: 1.125rem; }
+    .modal .form-group { margin-bottom: var(--space-md); }
+    .modal .btn-group { margin-top: var(--space-lg); margin-bottom: 0; }
+    .secret-value {
+      font-family: ui-monospace, monospace;
+      font-size: 0.875rem;
+      padding: var(--space-sm) var(--space-md);
+      background: rgba(0,0,0,.3);
+      border-radius: var(--radius-sm);
+      word-break: break-all;
+      user-select: all;
+    }
+    .checkbox-group { display: flex; flex-wrap: wrap; gap: var(--space-md); margin-top: var(--space-xs); }
+    .checkbox-group label { display: flex; align-items: center; margin: 0; cursor: pointer; }
   </style>
 </head>
 
@@ -441,7 +468,61 @@
         </div>
       </div>
     </section>
+
+    <section class="card" style="margin-top: var(--space-lg);">
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">Webhooks</h2>
+          <p class="card-desc">Customer webhook subscriptions for events: up, down, incident, maintenance. Secret is shown once on creation.</p>
+        </div>
+        <button type="button" id="addWebhookBtn" class="btn btn-primary">Add webhook</button>
+      </div>
+      <div class="card-body">
+        <div id="webhooksTableWrap" class="table-wrap">
+          <span class="notes-empty">Loading…</span>
+        </div>
+      </div>
+    </section>
   </main>
+
+  <div id="webhookModalOverlay" class="modal-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal">
+      <h3 id="webhookModalTitle">Add webhook</h3>
+      <div class="form-group">
+        <label for="webhookName">Name</label>
+        <input id="webhookName" type="text" placeholder="Company or contact name" />
+      </div>
+      <div class="form-group">
+        <label for="webhookUrl">URL</label>
+        <input id="webhookUrl" type="text" placeholder="https://example.com/webhook" />
+      </div>
+      <div class="form-group">
+        <label>Events</label>
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="webhookEventUp" value="up" /> up</label>
+          <label><input type="checkbox" id="webhookEventDown" value="down" /> down</label>
+          <label><input type="checkbox" id="webhookEventIncident" value="incident" /> incident</label>
+          <label><input type="checkbox" id="webhookEventMaintenance" value="maintenance" /> maintenance</label>
+        </div>
+      </div>
+      <div class="btn-group">
+        <button type="button" id="webhookModalSubmit" class="btn btn-primary">Create</button>
+        <button type="button" id="webhookModalCancel" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="webhookSecretModalOverlay" class="modal-overlay" style="display: none;" aria-hidden="true">
+    <div class="modal">
+      <h3>Webhook secret (copy now — won’t be shown again)</h3>
+      <p style="margin-bottom: var(--space-sm); color: var(--muted); font-size: 0.875rem;">Use this secret to verify requests with X-Webhook-Signature (HMAC-SHA256 of the JSON body).</p>
+      <div id="webhookSecretValue" class="secret-value"></div>
+      <div class="btn-group">
+        <button type="button" id="webhookSecretCopyBtn" class="btn btn-primary">Copy to clipboard</button>
+        <button type="button" id="webhookSecretCloseBtn" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const API = {
@@ -454,6 +535,10 @@
       INCIDENTS_POST: "/api/incidents",
       INCIDENT_ADD_UPDATE: (id) => `/api/incidents/${encodeURIComponent(id)}/updates`,
       INCIDENT_RESOLVE: (id) => `/api/incidents/${encodeURIComponent(id)}/resolve`,
+      WEBHOOKS_GET: "/api/admin/webhooks",
+      WEBHOOKS_POST: "/api/admin/webhooks",
+      WEBHOOK_PUT: (id) => `/api/admin/webhooks/${encodeURIComponent(id)}`,
+      WEBHOOK_DELETE: (id) => `/api/admin/webhooks/${encodeURIComponent(id)}`,
     };
 
     function $(id){ return document.getElementById(id); }
@@ -753,6 +838,112 @@
       await loadIncidentList();
     }
 
+    // ---------- Webhooks ----------
+    async function loadWebhooks(){
+      const wrap = $("webhooksTableWrap");
+      try {
+        const data = await fetchJson(API.WEBHOOKS_GET);
+        const items = data.items || [];
+        if (!items.length){
+          wrap.innerHTML = "<span class=\"notes-empty\">No webhooks. Click Add webhook to create one.</span>";
+          return;
+        }
+        const rows = items.map(it => {
+          const events = (it.events || "").split(",").map(e => e.trim()).filter(Boolean).join(", ");
+          const active = it.active ? "<span class=\"pill ok\">Active</span>" : "<span class=\"pill bad\">Disabled</span>";
+          const created = it.created_at ? new Date(it.created_at).toLocaleString() : "";
+          const toggleLabel = it.active ? "Disable" : "Enable";
+          return `<tr>
+            <td class="cell-title">${escapeHtml(it.name || "")}</td>
+            <td class="cell-body">${escapeHtml(it.url || "")}</td>
+            <td>${escapeHtml(events)}</td>
+            <td>${active}</td>
+            <td class="cell-date">${escapeHtml(created)}</td>
+            <td>
+              <button type="button" class="btn btn-secondary btn-sm js-webhook-toggle" data-id="${it.id}" data-active="${it.active}">${toggleLabel}</button>
+              <button type="button" class="btn btn-danger btn-sm js-webhook-delete" data-id="${it.id}">Delete</button>
+            </td>
+          </tr>`;
+        }).join("");
+        wrap.innerHTML = `<table class="admin-table"><thead><tr><th>Name</th><th>URL</th><th>Events</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+        wrap.querySelectorAll(".js-webhook-toggle").forEach(btn => {
+          btn.addEventListener("click", () => webhookSetActive(Number(btn.getAttribute("data-id")), btn.getAttribute("data-active") !== "true"));
+        });
+        wrap.querySelectorAll(".js-webhook-delete").forEach(btn => {
+          btn.addEventListener("click", () => webhookDelete(Number(btn.getAttribute("data-id"))));
+        });
+      } catch (e) {
+        wrap.innerHTML = "<span class=\"notes-empty\">Failed to load: " + escapeHtml(e.message) + "</span>";
+      }
+    }
+
+    function openWebhookCreateModal(){
+      $("webhookModalTitle").textContent = "Add webhook";
+      $("webhookName").value = "";
+      $("webhookUrl").value = "";
+      $("webhookEventUp").checked = false;
+      $("webhookEventDown").checked = false;
+      $("webhookEventIncident").checked = false;
+      $("webhookEventMaintenance").checked = false;
+      $("webhookModalOverlay").style.display = "flex";
+      $("webhookModalOverlay").setAttribute("aria-hidden", "false");
+    }
+
+    function closeWebhookCreateModal(){
+      $("webhookModalOverlay").style.display = "none";
+      $("webhookModalOverlay").setAttribute("aria-hidden", "true");
+    }
+
+    async function submitWebhookCreate(){
+      const name = $("webhookName").value.trim();
+      const url = $("webhookUrl").value.trim();
+      const events = [];
+      if ($("webhookEventUp").checked) events.push("up");
+      if ($("webhookEventDown").checked) events.push("down");
+      if ($("webhookEventIncident").checked) events.push("incident");
+      if ($("webhookEventMaintenance").checked) events.push("maintenance");
+      if (!name){ toast("Name is required.", "error"); return; }
+      if (!url){ toast("URL is required.", "error"); return; }
+      if (!events.length){ toast("Select at least one event.", "error"); return; }
+      const payload = { name, url, events };
+      const created = await fetchJson(API.WEBHOOKS_POST, {
+        method: "POST",
+        headers: incidentHeaders(),
+        body: JSON.stringify(payload)
+      });
+      closeWebhookCreateModal();
+      if (created.secret) {
+        $("webhookSecretValue").textContent = created.secret;
+        $("webhookSecretModalOverlay").style.display = "flex";
+        $("webhookSecretModalOverlay").setAttribute("aria-hidden", "false");
+      }
+      toast("Webhook created");
+      await loadWebhooks();
+    }
+
+    function closeWebhookSecretModal(){
+      $("webhookSecretModalOverlay").style.display = "none";
+      $("webhookSecretModalOverlay").setAttribute("aria-hidden", "true");
+    }
+
+    async function webhookSetActive(id, active){
+      await fetchJson(API.WEBHOOK_PUT(id), {
+        method: "PUT",
+        headers: incidentHeaders(),
+        body: JSON.stringify({ active })
+      });
+      toast(active ? "Webhook enabled" : "Webhook disabled");
+      await loadWebhooks();
+    }
+
+    async function webhookDelete(id){
+      const ok = await showConfirm("Delete this webhook subscription? This cannot be undone.");
+      if (!ok) return;
+      await fetchJson(API.WEBHOOK_DELETE(id), { method: "DELETE", headers: incidentHeaders() });
+      toast("Webhook deleted");
+      await loadWebhooks();
+    }
+
     // ---------- Wire up ----------
     $("logoutBtn").addEventListener("click", () => {
       clearSession();
@@ -771,6 +962,17 @@
     $("incidentReloadBtn").addEventListener("click", () => loadIncidentList().catch(e => toast(e.message, "error")));
     $("addUpdateBtn").addEventListener("click", () => addUpdate().catch(e => toast(e.message, "error")));
 
+    $("addWebhookBtn").addEventListener("click", () => openWebhookCreateModal());
+    $("webhookModalSubmit").addEventListener("click", () => submitWebhookCreate().catch(e => toast(e.message, "error")));
+    $("webhookModalCancel").addEventListener("click", closeWebhookCreateModal);
+    $("webhookModalOverlay").addEventListener("click", (e) => { if (e.target === $("webhookModalOverlay")) closeWebhookCreateModal(); });
+    $("webhookSecretCopyBtn").addEventListener("click", () => {
+      const el = $("webhookSecretValue");
+      navigator.clipboard.writeText(el.textContent || "").then(() => toast("Secret copied to clipboard")).catch(() => toast("Copy failed", "error"));
+    });
+    $("webhookSecretCloseBtn").addEventListener("click", closeWebhookSecretModal);
+    $("webhookSecretModalOverlay").addEventListener("click", (e) => { if (e.target === $("webhookSecretModalOverlay")) closeWebhookSecretModal(); });
+
     // ---------- Init ----------
     (async function init(){
       if (!getSessionToken()) {
@@ -786,6 +988,9 @@
 
       try { await loadIncidentList(); }
       catch(e){ console.error(e); }
+
+      try { await loadWebhooks(); }
+      catch(e){ console.error(e); toast("Failed to load webhooks: " + e.message, "error"); }
     })();
   </script>
 </body>

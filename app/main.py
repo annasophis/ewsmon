@@ -16,7 +16,7 @@ from app.settings import ENVIRONMENT
 
 from fastapi import Request, HTTPException
 from pydantic import BaseModel
-from app.models import SiteNotice, ApiNote, IncidentUpdate
+from app.models import SiteNotice, ApiNote, IncidentUpdate, WebhookSubscription
 from fastapi.responses import FileResponse
 log = get_logger(__name__)
 
@@ -775,5 +775,124 @@ def api_incidents_resolve(
     db.add(update_row)
     root.is_active = False
     root.resolved_at = now
+    db.commit()
+    return {"ok": True}
+
+
+# -----------------------------
+# Webhook subscriptions (admin)
+# -----------------------------
+
+VALID_WEBHOOK_EVENTS = {"up", "down", "incident", "maintenance"}
+
+
+class WebhookCreate(BaseModel):
+    name: str
+    url: str
+    events: list[str]  # e.g. ["up", "down", "incident", "maintenance"]
+
+
+class WebhookUpdateActive(BaseModel):
+    active: bool
+
+
+@app.post("/api/admin/webhooks")
+def api_admin_webhooks_create(
+    payload: WebhookCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Create a webhook subscription; returns subscription with secret (show once)."""
+    require_admin(request)
+    events_list = [e.strip().lower() for e in payload.events if e and str(e).strip()]
+    invalid = [e for e in events_list if e not in VALID_WEBHOOK_EVENTS]
+    if invalid:
+        raise HTTPException(400, f"Invalid events: {invalid}. Allowed: {sorted(VALID_WEBHOOK_EVENTS)}")
+    events_str = ",".join(sorted(set(events_list)))
+    name = (payload.name or "").strip()
+    url = (payload.url or "").strip()
+    if not name:
+        raise HTTPException(400, "name is required")
+    if not url:
+        raise HTTPException(400, "url is required")
+    secret = secrets.token_urlsafe(32)
+    row = WebhookSubscription(
+        name=name,
+        url=url,
+        events=events_str,
+        secret=secret,
+        active=True,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": row.id,
+        "name": row.name,
+        "url": row.url,
+        "events": row.events,
+        "active": row.active,
+        "created_at": row.created_at.isoformat(),
+        "secret": secret,
+    }
+
+
+@app.get("/api/admin/webhooks")
+def api_admin_webhooks_list(request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    """List all webhook subscriptions (no secret)."""
+    require_admin(request)
+    rows = db.query(WebhookSubscription).order_by(WebhookSubscription.created_at.desc()).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "url": r.url,
+                "events": r.events,
+                "active": r.active,
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in rows
+        ]
+    }
+
+
+@app.put("/api/admin/webhooks/{webhook_id}")
+def api_admin_webhooks_update(
+    webhook_id: int,
+    payload: WebhookUpdateActive,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Update webhook subscription (e.g. active status)."""
+    require_admin(request)
+    row = db.query(WebhookSubscription).filter(WebhookSubscription.id == webhook_id).first()
+    if not row:
+        raise HTTPException(404, "Webhook not found")
+    row.active = payload.active
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": row.id,
+        "name": row.name,
+        "url": row.url,
+        "events": row.events,
+        "active": row.active,
+        "created_at": row.created_at.isoformat(),
+    }
+
+
+@app.delete("/api/admin/webhooks/{webhook_id}")
+def api_admin_webhooks_delete(
+    webhook_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Delete a webhook subscription."""
+    require_admin(request)
+    row = db.query(WebhookSubscription).filter(WebhookSubscription.id == webhook_id).first()
+    if not row:
+        raise HTTPException(404, "Webhook not found")
+    db.delete(row)
     db.commit()
     return {"ok": True}
