@@ -27,7 +27,7 @@ def _today_yyyy_mm_dd_utc() -> str:
 
 def _now_et_iso() -> str:
     """Current time in America/Toronto (ET) for alert cards."""
-    return datetime.now(ZoneInfo("America/Toronto")).isoformat()
+    return datetime.now(ZoneInfo("America/Toronto")).strftime("%Y-%m-%d %I:%M:%S %p ET")
 
 
 def _is_uat_target(target: ApiTarget) -> bool:
@@ -797,7 +797,7 @@ async def main():
                                     "Time": time_str,
                                 }
                                 await notifications.send_teams_card(
-                                    f"✅ {target.name} RECOVERED",
+                                    f"{target.name} RECOVERED",
                                     "State change detected by EWS Monitoring (stable)",
                                     facts,
                                     webhook_url,
@@ -839,7 +839,7 @@ async def main():
                             "Time": time_str,
                         }
                         await notifications.send_teams_card(
-                            f"🚨 {target.name} DOWN",
+                            f"{target.name} DOWN",
                             "State change detected by EWS Monitoring",
                             facts,
                             webhook_url,

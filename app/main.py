@@ -336,7 +336,7 @@ def api_target_history(
 
     buckets = [
         {
-            "timestamp": r["timestamp"].isoformat() if r["timestamp"] else None,
+            "timestamp": r["timestamp"].isoformat() + "Z" if r["timestamp"] else None,
             "avg_duration_ms": round(float(r["avg_duration_ms"]), 2) if r["avg_duration_ms"] is not None else None,
             "count": r["count"],
             "success_count": r["success_count"],
