@@ -53,6 +53,19 @@ DEFAULT_TARGETS = [
         "soap_action": "http://purolator.com/pws/service/v2/TrackingByPinsOrReferences",
         "api_type": "shiptrack",
     },
+    {
+        "name": "Freight Tracking Service",
+        "url": "https://webservices.purolator.com/EWS/V1/FreightTracking/FreightTrackingService.asmx",
+        "soap_action": "http://purolator.com/pws/service/v1/Freight/TrackPackagesByPin",
+        "api_type": "freighttrack",
+    },
+    {
+        "name": "Freight Estimate Service",
+        "url": "https://webservices.purolator.com/EWS/V1/FreightEstimating/FreightEstimatingService.asmx",
+        "soap_action": "http://purolator.com/pws/service/v1/Freight/GetEstimate",
+        "api_type": "freightestimate",
+    },
+    
 ]
 
 def _to_uat_url(prod_url: str) -> str:

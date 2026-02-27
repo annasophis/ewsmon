@@ -257,6 +257,287 @@ def build_payload(target: ApiTarget, acct: str) -> Tuple[Optional[str], Dict[str
 """
         return soap_request.strip(), headers
 
+    if target.api_type == "freighttrack":
+        # allow env-specific test PINs
+        pin = (
+            getattr(settings, "PUROLATOR_FREIGHT_TRACK_PIN_UAT", None)
+            if _is_uat_target(target)
+            else getattr(settings, "PUROLATOR_FREIGHT_TRACK_PIN", None)
+        )
+        pin = pin or "8889768050"
+
+        soap_request = f"""<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:v1="http://purolator.com/pws/datatypes/v1">
+   <soapenv:Header>
+      <v1:RequestContext>
+         <!--type: string-->
+         <v1:Version>1.0</v1:Version>
+         <!--type: Language - enumeration: [en,fr]-->
+         <v1:Language>en</v1:Language>
+         <!--type: string-->
+         <v1:GroupID></v1:GroupID>
+         <!--type: string-->
+         <v1:RequestReference>Freight Tracking</v1:RequestReference>
+         <!--Optional:-->
+         <!--type: string-->
+         <v1:UserToken></v1:UserToken>
+      </v1:RequestContext>
+   </soapenv:Header>
+   <soapenv:Body>
+      <v1:TrackPackageByPINSearchCriteria>
+         <v1:PINs>
+            <!--Zero or more repetitions:-->
+            <v1:PIN>
+               <!--type: string-->
+               <v1:Value>{pin}</v1:Value>
+            </v1:PIN>
+         </v1:PINs>
+         <!--Optional:-->
+         <!--type: string-->
+         <v1:SearchType></v1:SearchType>
+      </v1:TrackPackageByPINSearchCriteria>
+   </soapenv:Body>
+</soapenv:Envelope>
+"""
+        return soap_request.strip(), headers
+
+    if target.api_type == "freightestimate":
+        # allow env-specific test PINs
+          acct = (
+            getattr(settings, "PUROLATOR_UAT_FREIGHT_ACCOUNT", None)
+            if _is_uat_target(target)
+            else getattr(settings, "PUROLATOR_FREIGHT_ACCOUNT", None)
+        )
+          acct = acct or "5553761"
+
+          soap_request = f"""<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns="http://purolator.com/pws/datatypes/v1">
+    <soapenv:Header>
+        <RequestContext>
+            <!--type: string-->
+            <Version>1.1</Version>
+            <!--type: Language - enumeration: [en,fr]-->
+            <Language>en</Language>
+            <!--type: string-->
+            <GroupID></GroupID>
+            <!--type: string-->
+            <RequestReference>FREIGHT SHIPMENT</RequestReference>
+        </RequestContext>
+    </soapenv:Header>
+    <soapenv:Body>
+        <FreightGetEstimateRequest>
+            <Estimate>
+                <SenderInformation>
+                    <Address>
+                        <!--type: string-->
+                        <Name>Ernest Sweetland</Name>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <Company>Purolator Inc</Company>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <Department>Shipping</Department>
+                        <!--type: string-->
+                        <StreetNumber>2727</StreetNumber>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <StreetSuffix></StreetSuffix>
+                        <!--type: string-->
+                        <StreetName>Meadowpine</StreetName>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <StreetType>Blvd</StreetType>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <StreetDirection></StreetDirection>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <Suite></Suite>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <Floor></Floor>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <StreetAddress2></StreetAddress2>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <StreetAddress3></StreetAddress3>
+                        <!--type: string-->
+                        <City>Mississauga</City>
+                        <!--type: string-->
+                        <Province>ON</Province>
+                        <!--type: string-->
+                        <Country>CA</Country>
+                        <!--type: string-->
+                        <PostalCode>L5N 0E1</PostalCode>
+                        <PhoneNumber>
+                            <!--type: string-->
+                            <CountryCode>1</CountryCode>
+                            <!--type: string-->
+                            <AreaCode>123</AreaCode>
+                            <!--type: string-->
+                            <Phone>1234567</Phone>
+                            <!--Optional:-->
+                            <!--type: string-->
+                            <Extension>1234</Extension>
+                        </PhoneNumber>
+                        <!--Optional:-->
+                        <FaxNumber>
+                            <!--type: string-->
+                            <CountryCode>1</CountryCode>
+                            <!--type: string-->
+                            <AreaCode>123</AreaCode>
+                            <!--type: string-->
+                            <Phone>1234567</Phone>
+                            <!--Optional:-->
+                            <!--type: string-->
+                            <Extension>1234</Extension>
+                        </FaxNumber>
+                    </Address>
+                    <!--Optional:-->
+                    <!--type: string-->
+                    <EmailAddress></EmailAddress>
+                </SenderInformation>
+                <ReceiverInformation>
+                    <Address>
+                        <!--type: string-->
+                        <Name>George H. Greenhalgh</Name>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <Company>Trans-Canada Couriers Ltd</Company>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <Department>Warehousing</Department>
+                        <!--type: string-->
+                        <StreetNumber>3146</StreetNumber>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <StreetSuffix></StreetSuffix>
+                        <!--type: string-->
+                        <StreetName>Bassel Street</StreetName>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <StreetType>Street</StreetType>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <StreetDirection></StreetDirection>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <Suite></Suite>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <Floor></Floor>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <StreetAddress2></StreetAddress2>
+                        <!--Optional:-->
+                        <!--type: string-->
+                        <StreetAddress3></StreetAddress3>
+                        <!--type: string-->
+                        <City>Pitt Meadows</City>
+                        <!--type: string-->
+                        <Province>BC</Province>
+                        <!--type: string-->
+                        <Country>CA</Country>
+                        <!--type: string-->
+                        <PostalCode>V3Y 2J4</PostalCode>
+                        <PhoneNumber>
+                            <!--type: string-->
+                            <CountryCode>1</CountryCode>
+                            <!--type: string-->
+                            <AreaCode>123</AreaCode>
+                            <!--type: string-->
+                            <Phone>1234567</Phone>
+                            <!--Optional:-->
+                            <!--type: string-->
+                            <Extension>1234</Extension>
+                        </PhoneNumber>
+                        <!--Optional:-->
+                        <FaxNumber>
+                            <!--type: string-->
+                            <CountryCode>1</CountryCode>
+                            <!--type: string-->
+                            <AreaCode>123</AreaCode>
+                            <!--type: string-->
+                            <Phone>1234567</Phone>
+                            <!--Optional:-->
+                            <!--type: string-->
+                            <Extension></Extension>
+                        </FaxNumber>
+                    </Address>
+                    <!--Optional:-->
+                    <!--type: string-->
+                    <EmailAddress></EmailAddress>
+                </ReceiverInformation>
+                <PaymentInformation>
+                    <!--type: PaymentType - enumeration: [Sender,Receiver,ThirdParty,CreditCard]-->
+                    <PaymentType>Sender</PaymentType>
+                    <!--type: string-->
+                    <RegisteredAccountNumber>{acct}</RegisteredAccountNumber>
+                    <!--Optional:-->
+                    <!--type: string-->
+                    <BillingAccountNumber>{acct}</BillingAccountNumber>
+                </PaymentInformation>
+                <ShipmentDetails>
+                    <!--Optional:-->
+                    <!--type: string -  I = Standard S= Expedited -->
+                    <ServiceTypeCode>S</ServiceTypeCode>
+                    <!--Optional:-->
+                    <!--type: string-->
+                    <ShipmentDate>2026-01-19</ShipmentDate>
+                    <!--Optional:-->
+                    <!--type: decimal-->
+                    <DeclaredValue></DeclaredValue>
+                    <!--Optional:-->
+                    <!--type: decimal-->
+                    <CODAmount></CODAmount>
+                    <!--Optional:-->
+                    <!--type: string-->
+                    <SpecialInstructions>This is a test.</SpecialInstructions>
+                    <LineItemDetails>
+                        <LineItem>
+                            <LineNumber>1</LineNumber>
+                            <Pieces>1</Pieces>
+                            <HandlingUnit>1</HandlingUnit>
+                            <HandlingUnitType>Skid</HandlingUnitType>
+                            <Description>MOTORCYCLE PARTS &amp; ACCESSORIES (MISC)</Description>
+                            <Weight>
+                                <Value>323</Value>
+                                <WeightUnit>lb</WeightUnit>
+                            </Weight>
+                            <FreightClass>250</FreightClass>
+                            <Length>
+                                <Value>48.000</Value>
+                                <DimensionUnit>in</DimensionUnit>
+                            </Length>
+                            <Width>
+                                <Value>41.000</Value>
+                                <DimensionUnit>in</DimensionUnit>
+                            </Width>
+                            <Height>
+                                <Value>96.000</Value>
+                                <DimensionUnit>in</DimensionUnit>
+                            </Height>
+                        </LineItem>
+                        
+                    </LineItemDetails>
+                    <!--Optional:-->
+                    <AccessorialParameters>
+                        <!--Zero or more repetitions:-->
+                        <BoolValuePair>
+                            <!--type: string-->
+                            <Keyword>2MEN</Keyword>
+                            <!--type: boolean-->
+                            <Value>false</Value>
+                        </BoolValuePair>
+                    </AccessorialParameters>
+                </ShipmentDetails>
+            </Estimate>
+        </FreightGetEstimateRequest>
+    </soapenv:Body>
+</soapenv:Envelope>
+"""
+          return soap_request.strip(), headers
+
     if target.api_type == "locate":
         soap_request = """<?xml version="1.0" encoding="utf-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:v1="http://purolator.com/pws/datatypes/v1">
