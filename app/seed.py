@@ -65,6 +65,18 @@ DEFAULT_TARGETS = [
         "soap_action": "http://purolator.com/pws/service/v1/Freight/GetEstimate",
         "api_type": "freightestimate",
     },
+        {
+        "name": "MyPurolator",
+        "url": "https://ship.purolator.com/my",
+        "soap_action": None,
+        "api_type": "http",
+    },
+    {
+        "name": "www.purolator.com",
+        "url": "https://www.purolator.com",
+        "soap_action": None,
+        "api_type": "http",
+    },
     
 ]
 
@@ -83,6 +95,8 @@ def seed_targets(db: Session) -> int:
 
     # UAT targets (clone + rename + host swap)
     for t in DEFAULT_TARGETS:
+        if t.get("api_type") == "http":
+            continue
         u = dict(t)
         u["name"] = f'{t["name"]} (UAT)'
         u["url"] = _to_uat_url(t["url"])

@@ -300,6 +300,7 @@ def build_payload(target: ApiTarget, acct: str) -> Tuple[Optional[str], Dict[str
 """
         return soap_request.strip(), headers
 
+
     if target.api_type == "freightestimate":
         # allow env-specific test PINs
           acct = (
@@ -894,6 +895,17 @@ def build_payload(target: ApiTarget, acct: str) -> Tuple[Optional[str], Dict[str
 
 
 async def probe_one(client: httpx.AsyncClient, target: ApiTarget) -> dict:
+    # HTTP targets — simple GET, no auth, no SOAP
+    if target.api_type == "http":
+        start = time.perf_counter()
+        try:
+            resp = await client.get(target.url)
+            ms = (time.perf_counter() - start) * 1000.0
+            ok = resp.status_code < 500
+            return {"ok": ok, "status": resp.status_code, "ms": ms, "error": None if ok else f"http {resp.status_code}"}
+        except Exception as e:
+            ms = (time.perf_counter() - start) * 1000.0
+            return {"ok": False, "status": None, "ms": ms, "error": f"{type(e).__name__}: {e}"}
     key, pwd, acct = _env_auth_and_account(target)
     soap_xml, headers = build_payload(target, acct)
 
