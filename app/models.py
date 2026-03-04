@@ -114,3 +114,15 @@ class WebhookSubscription(Base):
     secret: Mapped[str] = mapped_column(String(100), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class TargetState(Base):
+    """
+    Persisted alert state per target so the worker survives restarts.
+    """
+    __tablename__ = "target_state"
+
+    target_id: Mapped[int] = mapped_column(ForeignKey("api_target.id"), primary_key=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pending_recovered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_down_alert_ts: Mapped[float | None] = mapped_column(Float, nullable=True)

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, init_db
 from app.logger import configure_root_logging, get_logger
-from app.models import ApiTarget, ApiProbe, WebhookSubscription
+from app.models import ApiTarget, ApiProbe, WebhookSubscription, TargetState
 from app import notifications
 from app import payloads
 import app.settings as settings
@@ -204,6 +204,22 @@ def get_previous_probe_state(db: Session, target_ids: list[int]) -> dict[int, bo
     return {int(r[0]): bool(r[1]) for r in rows}
 
 
+def get_target_state(db: Session, target_id: int) -> TargetState:
+    """Fetch or create a TargetState row for the given target_id."""
+    state = db.get(TargetState, target_id)
+    if state is not None:
+        return state
+    state = TargetState(target_id=target_id)
+    db.add(state)
+    db.flush()
+    return state
+
+
+def save_target_state(db: Session, state: TargetState) -> None:
+    """Commit the state row."""
+    db.commit()
+
+
 WEBHOOK_REQUEST_TIMEOUT = 5
 
 
@@ -272,12 +288,6 @@ async def main():
 
     timeout = httpx.Timeout(timeout_seconds)
     last_cleanup = 0.0
-    # Cooldown only for DOWN (avoid spam when flapping); RECOVERED is sent as soon as stable.
-    _last_down_alert_ts: dict[int, float] = {}
-    # RECOVERED only after 2 consecutive UP probes (stable); DOWN->UP sets pending, next UP sends.
-    _pending_recovered: set[int] = set()
-    # Consecutive failures per target; DOWN alert only when count reaches threshold.
-    _consecutive_failures: dict[int, int] = {}
 
     log.info(
         "worker started",
@@ -318,25 +328,48 @@ async def main():
                     cooldown_sec = int(getattr(settings, "ALERT_COOLDOWN_SECONDS", 300))
                     failure_threshold = int(getattr(settings, "ALERT_FAILURE_THRESHOLD", 3))
                     for target_id, probe in results:
+                        try:
+                            state = get_target_state(db, target_id)
+                        except Exception as e:
+                            log.warning(
+                                "get_target_state failed, skipping alert logic for target",
+                                extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                            )
+                            continue
+
                         current_up = _is_up(probe)
                         if current_up:
-                            _consecutive_failures[target_id] = 0
+                            state.consecutive_failures = 0
                         else:
-                            _consecutive_failures[target_id] = _consecutive_failures.get(target_id, 0) + 1
+                            state.consecutive_failures = state.consecutive_failures + 1
 
                         prev_up = prev_state.get(target_id)
                         if prev_up is None:
+                            try:
+                                save_target_state(db, state)
+                            except Exception as e:
+                                log.warning(
+                                    "save_target_state failed",
+                                    extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                                )
                             continue
                         target = id_to_target.get(target_id)
                         if not target or not webhook_url:
+                            try:
+                                save_target_state(db, state)
+                            except Exception as e:
+                                log.warning(
+                                    "save_target_state failed",
+                                    extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                                )
                             continue
 
                         # Same state as last time: check RECOVERED (2nd consecutive UP) or DOWN (consecutive failures just hit threshold)
                         if prev_up == current_up:
-                            if current_up and target_id in _pending_recovered:
+                            if current_up and state.pending_recovered:
                                 # Stable: two UPs in a row after a DOWN -> send RECOVERED
-                                _pending_recovered.discard(target_id)
-                                _consecutive_failures[target_id] = 0
+                                state.pending_recovered = False
+                                state.consecutive_failures = 0
                                 status_str = str(probe.get("status")) if probe.get("status") is not None else "timeout"
                                 latency = probe.get("ms")
                                 latency_str = f"{latency:.0f} ms" if latency is not None else "—"
@@ -376,12 +409,25 @@ async def main():
                                         "latency_ms": probe.get("ms"),
                                     },
                                 )
-                            elif not current_up and _consecutive_failures.get(target_id, 0) >= failure_threshold:
+                                try:
+                                    save_target_state(db, state)
+                                except Exception as e:
+                                    log.warning(
+                                        "save_target_state failed",
+                                        extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                                    )
+                            elif not current_up and state.consecutive_failures >= failure_threshold:
                                 # Still down and consecutive failures just reached threshold -> send DOWN (if not in cooldown)
-                                if (target_id in _last_down_alert_ts) and (
-                                    now - _last_down_alert_ts[target_id] < cooldown_sec
+                                if (state.last_down_alert_ts is not None) and (
+                                    now - state.last_down_alert_ts < cooldown_sec
                                 ):
-                                    pass
+                                    try:
+                                        save_target_state(db, state)
+                                    except Exception as e:
+                                        log.warning(
+                                            "save_target_state failed",
+                                            extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                                        )
                                 else:
                                     status_str = str(probe.get("status")) if probe.get("status") is not None else "timeout"
                                     latency = probe.get("ms")
@@ -413,7 +459,7 @@ async def main():
                                         "time": time_str,
                                     }
                                     await fire_customer_webhooks("down", webhook_payload)
-                                    _last_down_alert_ts[target_id] = now
+                                    state.last_down_alert_ts = now
                                     log.info(
                                         "alert sent",
                                         extra={
@@ -424,20 +470,57 @@ async def main():
                                             "latency_ms": probe.get("ms"),
                                         },
                                     )
-                            continue
+                                    try:
+                                        save_target_state(db, state)
+                                    except Exception as e:
+                                        log.warning(
+                                            "save_target_state failed",
+                                            extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                                        )
+                        else:
+                            # Same state but no alert sent (e.g. current_up and not pending_recovered); still persist consecutive_failures
+                            try:
+                                save_target_state(db, state)
+                            except Exception as e:
+                                log.warning(
+                                    "save_target_state failed",
+                                    extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                                )
+                        continue
 
                         # State flip
                         if not prev_up and current_up:
                             # DOWN -> UP: wait for one more UP before sending RECOVERED (stable)
-                            _pending_recovered.add(target_id)
+                            state.pending_recovered = True
+                            try:
+                                save_target_state(db, state)
+                            except Exception as e:
+                                log.warning(
+                                    "save_target_state failed",
+                                    extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                                )
                             continue
                         # UP -> DOWN: only send DOWN when consecutive failures reach threshold (then cooldown applies)
-                        _pending_recovered.discard(target_id)
-                        if _consecutive_failures.get(target_id, 0) < failure_threshold:
+                        state.pending_recovered = False
+                        if state.consecutive_failures < failure_threshold:
+                            try:
+                                save_target_state(db, state)
+                            except Exception as e:
+                                log.warning(
+                                    "save_target_state failed",
+                                    extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                                )
                             continue
-                        if (target_id in _last_down_alert_ts) and (
-                            now - _last_down_alert_ts[target_id] < cooldown_sec
+                        if (state.last_down_alert_ts is not None) and (
+                            now - state.last_down_alert_ts < cooldown_sec
                         ):
+                            try:
+                                save_target_state(db, state)
+                            except Exception as e:
+                                log.warning(
+                                    "save_target_state failed",
+                                    extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                                )
                             continue
                         status_str = str(probe.get("status")) if probe.get("status") is not None else "timeout"
                         latency = probe.get("ms")
@@ -470,7 +553,7 @@ async def main():
                             "time": time_str,
                         }
                         await fire_customer_webhooks("down", webhook_payload)
-                        _last_down_alert_ts[target_id] = now
+                        state.last_down_alert_ts = now
                         log.info(
                             "alert sent",
                             extra={
@@ -481,6 +564,13 @@ async def main():
                                 "latency_ms": probe.get("ms"),
                             },
                         )
+                        try:
+                            save_target_state(db, state)
+                        except Exception as e:
+                            log.warning(
+                                "save_target_state failed",
+                                extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                            )
 
                 ok_count = sum(1 for _, r in results if r.get("ok"))
                 log.info(
