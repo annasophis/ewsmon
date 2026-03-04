@@ -50,6 +50,8 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL", "").strip() or os.getenv("ALERT_WEBHOOK_URL", "").strip()
 # Cooldown (seconds) per target to avoid spam when flapping. Default 300.
 ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
+# Consecutive failures before sending a DOWN alert. Default 3.
+ALERT_FAILURE_THRESHOLD = int(os.getenv("ALERT_FAILURE_THRESHOLD", "3"))
 ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
 
 # ----------------------------
