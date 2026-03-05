@@ -739,6 +739,49 @@ setInterval(load, REFRESH_MS);
   let currentTargetName = null;
   let currentRange = DEFAULT_RANGE;
 
+  function formatOutageDuration(startTs, endTs) {
+    const start = new Date(startTs).getTime();
+    const end = new Date(endTs).getTime();
+    const sec = Math.round((end - start) / 1000);
+    if (sec < 60) return sec + "s";
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return s > 0 ? m + "m " + s + "s" : m + "m";
+  }
+
+  function timestampToIndex(ts, bucketTimes) {
+    const t = new Date(ts).getTime();
+    const n = bucketTimes.length;
+    if (n === 0) return 0;
+    const t0 = bucketTimes[0];
+    const t1 = bucketTimes[n - 1];
+    if (t <= t0) return 0;
+    if (t >= t1) return n - 1;
+    for (let i = 0; i < n - 1; i++) {
+      if (t >= bucketTimes[i] && t < bucketTimes[i + 1]) {
+        const d = bucketTimes[i + 1] - bucketTimes[i];
+        return d ? i + (t - bucketTimes[i]) / d : i;
+      }
+    }
+    return n - 1;
+  }
+
+  function timestampToFracIndex(tsMs, bucketEpochMs) {
+    const n = bucketEpochMs.length;
+    if (n === 0) return 0;
+    if (n === 1) return 0;
+    const first = bucketEpochMs[0];
+    const last = bucketEpochMs[n - 1];
+    const clamped = Math.max(first, Math.min(last, tsMs));
+    for (let i = 0; i < n - 1; i++) {
+      if (clamped >= bucketEpochMs[i] && clamped <= bucketEpochMs[i + 1]) {
+        const d = bucketEpochMs[i + 1] - bucketEpochMs[i];
+        return i + (d ? (clamped - bucketEpochMs[i]) / d : 0);
+      }
+    }
+    return n - 1;
+  }
+
   function openChartModal() {
     modal.classList.remove("hidden");
     backdrop.classList.remove("hidden");
@@ -765,10 +808,12 @@ setInterval(load, REFRESH_MS);
     return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 
-  function renderChart(buckets) {
+  function renderChart(buckets, failure_events) {
     if (chartInstance) chartInstance.destroy();
 
+    const events = failure_events && failure_events.length ? failure_events : [];
     const labels = buckets.map((b) => getBucketLabel(b.timestamp));
+    const bucketEpochMs = buckets.map((b) => new Date(b.timestamp).getTime());
     const avgMs = buckets.map((b) => (b.avg_duration_ms != null ? b.avg_duration_ms : null));
 
     const bucketLabel = currentRange === "1h" ? "5 min" : currentRange === "6h" ? "30 min" : currentRange === "24h" ? "1h" : "6h";
@@ -777,15 +822,17 @@ setInterval(load, REFRESH_MS);
       type: "line",
       data: {
         labels,
-        datasets: [{
-          label: `Avg response time (${bucketLabel} buckets)`,
-          data: avgMs,
-          borderColor: "rgb(124, 156, 255)",
-          backgroundColor: "rgba(124, 156, 255, 0.1)",
-          fill: true,
-          tension: 0.2,
-          spanGaps: true,
-        }],
+        datasets: [
+          {
+            label: `Avg response time (${bucketLabel} buckets)`,
+            data: avgMs,
+            borderColor: "rgb(124, 156, 255)",
+            backgroundColor: "rgba(124, 156, 255, 0.1)",
+            fill: true,
+            tension: 0.2,
+            spanGaps: true,
+          },
+        ],
       },
       options: {
         responsive: true,
@@ -793,6 +840,18 @@ setInterval(load, REFRESH_MS);
         aspectRatio: 2.2,
         plugins: {
           legend: { display: true },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                if (context.datasetIndex === 1 && buckets[context.dataIndex] && buckets[context.dataIndex].fail_count > 0) {
+                  return "Failures: " + buckets[context.dataIndex].fail_count;
+                }
+                const label = context.dataset.label || "";
+                const value = context.parsed.y;
+                return value != null ? label + ": " + value : label;
+              },
+            },
+          },
         },
         scales: {
           x: {
@@ -819,7 +878,15 @@ setInterval(load, REFRESH_MS);
     const pct = s.total_probes ? ((s.success_count / s.total_probes) * 100).toFixed(1) : "0";
     const avgStr = s.avg_ms != null ? s.avg_ms.toFixed(0) : "—";
     const p95Str = s.p95_ms != null ? s.p95_ms.toFixed(0) : "";
-    summaryEl.textContent = `Probes: ${s.total_probes} • Success: ${s.success_count}/${s.total_probes} (${pct}%) • Avg: ${avgStr} ms${p95Str ? " • P95: " + p95Str + " ms" : ""}`;
+    const line1 = `Probes: ${s.total_probes} • Success: ${s.success_count}/${s.total_probes} (${pct}%) • Avg: ${avgStr} ms${p95Str ? " • P95: " + p95Str + " ms" : ""} • Fails: ${s.fail_count != null ? s.fail_count : 0}`;
+    let line2 = "";
+    if (s.fail_count > 0) {
+      const firstFail = fmtTime(s.first_fail_ts);
+      const lastFail = fmtTime(s.last_fail_ts);
+      line2 = `First fail: ${firstFail} • Last fail: ${lastFail}`;
+    }
+    summaryEl.style.whiteSpace = "pre-line";
+    summaryEl.textContent = line2 ? line1 + "\n" + line2 : line1;
   }
 
   function updateRangeSegmentedUI(selectedRange) {
@@ -840,10 +907,11 @@ setInterval(load, REFRESH_MS);
       const data = await res.json();
       const buckets = data.buckets || [];
       const summary = data.summary || {};
+      const failure_events = data.failure_events || [];
       stateEl.textContent = "";
 
       if (buckets.length) {
-        renderChart(buckets);
+        renderChart(buckets, failure_events);
       } else {
         stateEl.textContent = "No probe data yet for this endpoint.";
         if (chartInstance) {

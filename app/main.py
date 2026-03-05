@@ -326,7 +326,8 @@ def api_target_history(
           to_timestamp(floor(extract(epoch from ts) / :epoch_step) * :epoch_step) AT TIME ZONE 'UTC' AS timestamp,
           avg(duration_ms)::float AS avg_duration_ms,
           count(*)::int AS count,
-          sum(case when ok then 1 else 0 end)::int AS success_count
+          sum(case when ok then 1 else 0 end)::int AS success_count,
+          sum(case when ok then 0 else 1 end)::int AS fail_count
         FROM api_probe
         WHERE target_id = :target_id
           AND ts >= now() - interval '{interval_str}'
@@ -345,16 +346,20 @@ def api_target_history(
             "avg_duration_ms": round(float(r["avg_duration_ms"]), 2) if r["avg_duration_ms"] is not None else None,
             "count": r["count"],
             "success_count": r["success_count"],
+            "fail_count": r["fail_count"],
         }
         for r in rows
     ]
 
-    # Summary: total_probes, success_count, avg_ms, p95_ms
+    # Summary: total_probes, success_count, fail_count, first_fail_ts, last_fail_ts, avg_ms, p95_ms
     summary_sql = text(
         f"""
         SELECT
           count(*)::int AS total_probes,
           sum(case when ok then 1 else 0 end)::int AS success_count,
+          sum(case when ok then 0 else 1 end)::int AS fail_count,
+          min(ts) FILTER (WHERE ok = false) AS first_fail_ts,
+          max(ts) FILTER (WHERE ok = false) AS last_fail_ts,
           avg(duration_ms)::float AS avg_ms,
           percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms)::float AS p95_ms
         FROM api_probe
@@ -367,18 +372,102 @@ def api_target_history(
         {"target_id": target_id},
     ).mappings().first()
 
+    fail_count = sum_row["fail_count"] or 0
     summary = {
         "total_probes": sum_row["total_probes"] or 0,
         "success_count": sum_row["success_count"] or 0,
+        "fail_count": fail_count,
+        "first_fail_ts": sum_row["first_fail_ts"].isoformat().replace("+00:00", "Z") if sum_row["first_fail_ts"] else None,
+        "last_fail_ts": sum_row["last_fail_ts"].isoformat().replace("+00:00", "Z") if sum_row["last_fail_ts"] else None,
         "avg_ms": round(float(sum_row["avg_ms"]), 2) if sum_row["avg_ms"] is not None else None,
         "p95_ms": round(float(sum_row["p95_ms"]), 2) if sum_row["p95_ms"] is not None else None,
+        "top_errors": [],
     }
+
+    # Failed probes in range for top_errors and failure_events
+    failed_sql = text(
+        f"""
+        SELECT ts, http_status, error
+        FROM api_probe
+        WHERE target_id = :target_id AND ok = false
+          AND ts >= now() - interval '{interval_str}'
+        ORDER BY ts
+        """
+    )
+    failed_rows = db.execute(failed_sql, {"target_id": target_id}).mappings().all()
+
+    def _error_key(http_status: int | None, error: str | None) -> str:
+        if error:
+            if "ReadTimeout" in error:
+                return "ReadTimeout"
+            if "ConnectError" in error:
+                return "ConnectError"
+            if "timeout" in error.lower():
+                return "Timeout"
+        if http_status is not None:
+            return f"http {http_status}"
+        return "Other"
+
+    if failed_rows:
+        key_counts: dict[str, int] = {}
+        for r in failed_rows:
+            k = _error_key(r["http_status"], r["error"])
+            key_counts[k] = key_counts.get(k, 0) + 1
+        summary["top_errors"] = [{"key": k, "count": c} for k, c in sorted(key_counts.items(), key=lambda x: -x[1])]
+
+    # Group failed probes into events: gap <= max(120, epoch_step*2) => same event
+    event_gap_sec = max(120, epoch_step * 2)
+    failure_events: list[dict[str, Any]] = []
+    if failed_rows:
+        current: list[dict[str, Any]] = []
+        for r in failed_rows:
+            ts = r["ts"]
+            if not current:
+                current.append({"ts": ts, "http_status": r["http_status"], "error": r["error"]})
+                continue
+            last_ts = current[-1]["ts"]
+            gap = (ts - last_ts).total_seconds()
+            if gap <= event_gap_sec:
+                current.append({"ts": ts, "http_status": r["http_status"], "error": r["error"]})
+            else:
+                # emit event
+                status_counts: dict[int | None, int] = {}
+                err_counts: dict[str, int] = {}
+                for x in current:
+                    status_counts[x["http_status"]] = status_counts.get(x["http_status"], 0) + 1
+                    err_counts[_error_key(x["http_status"], x["error"])] = err_counts.get(_error_key(x["http_status"], x["error"]), 0) + 1
+                top_status = max(status_counts, key=status_counts.get) if status_counts else None
+                top_error = max(err_counts, key=err_counts.get) if err_counts else "Other"
+                failure_events.append({
+                    "start_ts": current[0]["ts"].isoformat().replace("+00:00", "Z"),
+                    "end_ts": current[-1]["ts"].isoformat().replace("+00:00", "Z"),
+                    "fails": len(current),
+                    "top_status": top_status,
+                    "top_error": top_error,
+                })
+                current = [{"ts": ts, "http_status": r["http_status"], "error": r["error"]}]
+        if current:
+            status_counts = {}
+            err_counts = {}
+            for x in current:
+                status_counts[x["http_status"]] = status_counts.get(x["http_status"], 0) + 1
+                err_counts[_error_key(x["http_status"], x["error"])] = err_counts.get(_error_key(x["http_status"], x["error"]), 0) + 1
+            top_status = max(status_counts, key=status_counts.get) if status_counts else None
+            top_error = max(err_counts, key=err_counts.get) if err_counts else "Other"
+            failure_events.append({
+                "start_ts": current[0]["ts"].isoformat().replace("+00:00", "Z"),
+                "end_ts": current[-1]["ts"].isoformat().replace("+00:00", "Z"),
+                "fails": len(current),
+                "top_status": top_status,
+                "top_error": top_error,
+            })
 
     return {
         "target_id": target_id,
         "range": range,
         "buckets": buckets,
         "summary": summary,
+        "failure_events": failure_events,
     }
 
 @app.get("/api/notices")

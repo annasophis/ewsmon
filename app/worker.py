@@ -364,7 +364,7 @@ async def main():
                                 )
                             continue
 
-                        # Same state as last time: check RECOVERED (2nd consecutive UP) or DOWN (consecutive failures just hit threshold)
+                        # Same state as last time: check RECOVERED (2nd consecutive UP); handle startup-DOWN; no re-alerts while DOWN
                         if prev_up == current_up:
                             if current_up and state.pending_recovered:
                                 # Stable: two UPs in a row after a DOWN -> send RECOVERED
@@ -416,8 +416,12 @@ async def main():
                                         "save_target_state failed",
                                         extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
                                     )
-                            elif not current_up and state.consecutive_failures >= failure_threshold:
-                                # Still down and consecutive failures just reached threshold -> send DOWN (if not in cooldown)
+                            elif (
+                                not current_up
+                                and state.last_down_alert_ts is None
+                                and state.consecutive_failures >= failure_threshold
+                            ):
+                                # Service was already DOWN when worker started: send initial DOWN (then behave like normal DOWN state)
                                 if (state.last_down_alert_ts is not None) and (
                                     now - state.last_down_alert_ts < cooldown_sec
                                 ):
@@ -448,7 +452,10 @@ async def main():
                                         facts,
                                         webhook_url,
                                     )
-                                    log.info("about to fire customer webhooks", extra={"target_id": target_id, "event_type": "down"})
+                                    log.info(
+                                        "about to fire customer webhooks",
+                                        extra={"target_id": target_id, "event_type": "down"},
+                                    )
                                     webhook_payload = {
                                         "event_type": "down",
                                         "service": target.name,
@@ -477,16 +484,16 @@ async def main():
                                             "save_target_state failed",
                                             extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
                                         )
-                        else:
-                            # Same state but no alert sent (e.g. current_up and not pending_recovered); still persist consecutive_failures
-                            try:
-                                save_target_state(db, state)
-                            except Exception as e:
-                                log.warning(
-                                    "save_target_state failed",
-                                    extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
-                                )
-                        continue
+                            else:
+                                # Same state but no alert sent (e.g. current_up and not pending_recovered); still persist consecutive_failures
+                                try:
+                                    save_target_state(db, state)
+                                except Exception as e:
+                                    log.warning(
+                                        "save_target_state failed",
+                                        extra={"target_id": target_id, "error": str(e), "error_type": type(e).__name__},
+                                    )
+                            continue
 
                         # State flip
                         if not prev_up and current_up:
