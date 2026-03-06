@@ -255,6 +255,502 @@ def build_freighttrack_payload(target: "ApiTarget", acct: str) -> tuple[str, dic
     return soap_request.strip(), headers
 
 
+def build_freightshipping_payload(target: "ApiTarget", acct: str) -> tuple[str, dict[str, str]]:
+    """Freight CreateShipment probe payload; hardcoded to trigger a failed response (no real shipment)."""
+    headers = _base_headers(target)
+    soap_request = """<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns="http://purolator.com/pws/datatypes/v1">
+   <soapenv:Header>
+      <RequestContext>
+         <!--type: string-->
+         <Version>1.1</Version>
+         <!--type: Language - enumeration: [en,fr]-->
+         <Language>en</Language>
+         <!--type: string-->
+         <GroupID>0</GroupID>
+         <!--type: string-->
+         <RequestReference>FREIGHT SHIPMENT</RequestReference>
+      </RequestContext>
+   </soapenv:Header>
+   <soapenv:Body>
+      <CreateShipmentRequest>
+         <Shipment>
+            <SenderInformation>
+               <Address>
+                  <!--type: string-->
+                  <Name>Ernest Sweetland</Name>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <Company>Purolator Inc</Company>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <Department>Shipping</Department>
+                  <!--type: string-->
+                  <StreetNumber>2727</StreetNumber>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <StreetSuffix></StreetSuffix>
+                  <!--type: string-->
+                  <StreetName>Meadowpine</StreetName>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <StreetType>Blvd</StreetType>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <StreetDirection></StreetDirection>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <Suite></Suite>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <Floor></Floor>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <StreetAddress2></StreetAddress2>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <StreetAddress3></StreetAddress3>
+                  <!--type: string-->
+                  <City>Mississauga</City>
+                  <!--type: string-->
+                  <Province>ON</Province>
+                  <!--type: string-->
+                  <Country>CA</Country>
+                  <!--type: string-->
+                  <PostalCode>L5N 0E1</PostalCode>
+                  <PhoneNumber>
+                     <!--type: string-->
+                     <CountryCode>1</CountryCode>
+                     <!--type: string-->
+                     <AreaCode>123</AreaCode>
+                     <!--type: string-->
+                     <Phone>1234567</Phone>
+                     <!--Optional:-->
+                     <!--type: string-->
+                     <Extension>1234</Extension>
+                  </PhoneNumber>
+                  <!--Optional:-->
+                  <FaxNumber>
+                     <!--type: string-->
+                     <CountryCode>1</CountryCode>
+                     <!--type: string-->
+                     <AreaCode>123</AreaCode>
+                     <!--type: string-->
+                     <Phone>1234567</Phone>
+                     <!--Optional:-->
+                     <!--type: string-->
+                     <Extension>1234</Extension>
+                  </FaxNumber>
+               </Address>
+               <!--Optional:-->
+               <!--type: string-->
+               <EmailAddress></EmailAddress>
+            </SenderInformation>
+            <ReceiverInformation>
+               <Address>
+                  <!--type: string-->
+                  <Name>George H. Greenhalgh</Name>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <Company>Trans-Canada Couriers Ltd</Company>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <Department>Warehousing</Department>
+                  <!--type: string-->
+                  <StreetNumber>7000</StreetNumber>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <StreetSuffix></StreetSuffix>
+                  <!--type: string-->
+                  <StreetName>Armand Viau</StreetName>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <StreetType>Street</StreetType>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <StreetDirection></StreetDirection>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <Suite></Suite>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <Floor></Floor>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <StreetAddress2></StreetAddress2>
+                  <!--Optional:-->
+                  <!--type: string-->
+                  <StreetAddress3></StreetAddress3>
+                  <!--type: string-->
+                  <City>Quebec</City>
+                  <!--type: string-->
+                  <Province>QC</Province>
+                  <!--type: string-->
+                  <Country>CA</Country>
+                  <!--type: string-->
+                  <PostalCode>G2C2C4</PostalCode>
+                  <PhoneNumber>
+                     <!--type: string-->
+                     <CountryCode>1</CountryCode>
+                     <!--type: string-->
+                     <AreaCode>123</AreaCode>
+                     <!--type: string-->
+                     <Phone>1234567</Phone>
+                     <!--Optional:-->
+                     <!--type: string-->
+                     <Extension>1234</Extension>
+                  </PhoneNumber>
+                  <!--Optional:-->
+                  <FaxNumber>
+                     <!--type: string-->
+                     <CountryCode>1</CountryCode>
+                     <!--type: string-->
+                     <AreaCode>123</AreaCode>
+                     <!--type: string-->
+                     <Phone>1234567</Phone>
+                     <!--Optional:-->
+                     <!--type: string-->
+                     <Extension></Extension>
+                  </FaxNumber>
+               </Address>
+               <!--Optional:-->
+               <!--type: string-->
+               <EmailAddress></EmailAddress>
+            </ReceiverInformation>
+             <PaymentInformation>
+               <!--type: PaymentType - enumeration: [Sender,Receiver,ThirdParty,CreditCard]-->
+               <PaymentType>Sender</PaymentType>
+               <!--type: string-->
+               <RegisteredAccountNumber>1234567</RegisteredAccountNumber>
+               <!--Optional:-->
+               <!--type: string-->
+               <BillingAccountNumber>1234567</BillingAccountNumber>
+
+            </PaymentInformation>
+            <ShipmentDetails>
+               <!--Optional:-->
+               <!--type: string -  I = Standard S= Expedited -->
+               <ServiceTypeCode>S</ServiceTypeCode>
+               <!--Optional:-->
+               <!--type: string-->
+               <ShipmentDate>2026-02-09</ShipmentDate>
+               <!--Optional:-->
+               <!--type: decimal-->
+               <DeclaredValue>1300</DeclaredValue>
+               <!--Optional:-->
+               <!--type: decimal-->
+               <CODAmount>200</CODAmount>
+               <!--Optional:-->
+               <!--type: string-->
+               <SpecialInstructions>This is a test.</SpecialInstructions>
+               <LineItemDetails>
+                  <!--Zero or more repetitions:-->
+                  <LineItem>
+                     <!--type: int-->
+                     <LineNumber>1</LineNumber>
+                     <!--type: int-->
+                     <Pieces>1</Pieces>
+                     <!--type: int-->
+                     <HandlingUnit>1</HandlingUnit>
+                     <!--type: string-->
+                     <HandlingUnitType>pallet</HandlingUnitType>
+                     <!--Optional:-->
+                     <!--type: string-->
+                     <Description>Industrial Oven</Description>
+                     <Weight>
+                        <!--type: decimal-->
+                        <Value>260</Value>
+                        <!--type: WeightUnit - enumeration: [lb,kg]-->
+                        <WeightUnit>lb</WeightUnit>
+                     </Weight>
+                     <!--Optional:-->
+                     <Length>
+                        <!--type: decimal-->
+                        <Value>30</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Length>
+                     <!--Optional:-->
+                     <Width>
+                        <!--type: decimal-->
+                        <Value>50</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Width>
+                     <!--Optional:-->
+                     <Height>
+                        <!--type: decimal-->
+                        <Value>30</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Height>
+                     <!--Optional:-->
+                     <!--type: decimal-->
+                     <BasePrice>500</BasePrice>
+                     <!--Optional:-->
+                     <!--type: decimal-->
+                     <Charge>50</Charge>
+                  </LineItem>
+                  <LineItem>
+                     <!--type: int-->
+                     <LineNumber>2</LineNumber>
+                     <!--type: int-->
+                     <Pieces>1</Pieces>
+                     <!--type: int-->
+                     <HandlingUnit>1</HandlingUnit>
+                     <!--type: string-->
+                     <HandlingUnitType>pallet</HandlingUnitType>
+                     <!--Optional:-->
+                     <!--type: string-->
+                     <Description>Industrial Oven</Description>
+                     <Weight>
+                        <!--type: decimal-->
+                        <Value>260</Value>
+                        <!--type: WeightUnit - enumeration: [lb,kg]-->
+                        <WeightUnit>lb</WeightUnit>
+                     </Weight>
+                     <!--Optional:-->
+                     <Length>
+                        <!--type: decimal-->
+                        <Value>30</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Length>
+                     <!--Optional:-->
+                     <Width>
+                        <!--type: decimal-->
+                        <Value>50</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Width>
+                     <!--Optional:-->
+                     <Height>
+                        <!--type: decimal-->
+                        <Value>30</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Height>
+                     <!--Optional:-->
+                     <!--type: decimal-->
+                     <BasePrice>500</BasePrice>
+                     <!--Optional:-->
+                     <!--type: decimal-->
+                     <Charge>50</Charge>
+                  </LineItem>
+                  <LineItem>
+                     <!--type: int-->
+                     <LineNumber>3</LineNumber>
+                     <!--type: int-->
+                     <Pieces>1</Pieces>
+                     <!--type: int-->
+                     <HandlingUnit>1</HandlingUnit>
+                     <!--type: string-->
+                     <HandlingUnitType>pallet</HandlingUnitType>
+                     <!--Optional:-->
+                     <!--type: string-->
+                     <Description>Industrial Oven</Description>
+                     <Weight>
+                        <!--type: decimal-->
+                        <Value>260</Value>
+                        <!--type: WeightUnit - enumeration: [lb,kg]-->
+                        <WeightUnit>lb</WeightUnit>
+                     </Weight>
+                     <!--Optional:-->
+                     <Length>
+                        <!--type: decimal-->
+                        <Value>30</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Length>
+                     <!--Optional:-->
+                     <Width>
+                        <!--type: decimal-->
+                        <Value>50</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Width>
+                     <!--Optional:-->
+                     <Height>
+                        <!--type: decimal-->
+                        <Value>30</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Height>
+                     <!--Optional:-->
+                     <!--type: decimal-->
+                     <BasePrice>500</BasePrice>
+                     <!--Optional:-->
+                     <!--type: decimal-->
+                     <Charge>50</Charge>
+                  </LineItem>
+                  <LineItem>
+                     <!--type: int-->
+                     <LineNumber>4</LineNumber>
+                     <!--type: int-->
+                     <Pieces>1</Pieces>
+                     <!--type: int-->
+                     <HandlingUnit>1</HandlingUnit>
+                     <!--type: string-->
+                     <HandlingUnitType>pallet</HandlingUnitType>
+                     <!--Optional:-->
+                     <!--type: string-->
+                     <Description>Industrial Oven</Description>
+                     <Weight>
+                        <!--type: decimal-->
+                        <Value>260</Value>
+                        <!--type: WeightUnit - enumeration: [lb,kg]-->
+                        <WeightUnit>lb</WeightUnit>
+                     </Weight>
+                     <!--Optional:-->
+                     <Length>
+                        <!--type: decimal-->
+                        <Value>30</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Length>
+                     <!--Optional:-->
+                     <Width>
+                        <!--type: decimal-->
+                        <Value>50</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Width>
+                     <!--Optional:-->
+                     <Height>
+                        <!--type: decimal-->
+                        <Value>30</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Height>
+                     <!--Optional:-->
+                     <!--type: decimal-->
+                     <BasePrice>500</BasePrice>
+                     <!--Optional:-->
+                     <!--type: decimal-->
+                     <Charge>50</Charge>
+                  </LineItem>
+                  <LineItem>
+                     <!--type: int-->
+                     <LineNumber>5</LineNumber>
+                     <!--type: int-->
+                     <Pieces>1</Pieces>
+                     <!--type: int-->
+                     <HandlingUnit>1</HandlingUnit>
+                     <!--type: string-->
+                     <HandlingUnitType>pallet</HandlingUnitType>
+                     <!--Optional:-->
+                     <!--type: string-->
+                     <Description>Industrial Oven</Description>
+                     <Weight>
+                        <!--type: decimal-->
+                        <Value>260</Value>
+                        <!--type: WeightUnit - enumeration: [lb,kg]-->
+                        <WeightUnit>lb</WeightUnit>
+                     </Weight>
+                     <!--Optional:-->
+                     <Length>
+                        <!--type: decimal-->
+                        <Value>30</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Length>
+                     <!--Optional:-->
+                     <Width>
+                        <!--type: decimal-->
+                        <Value>50</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Width>
+                     <!--Optional:-->
+                     <Height>
+                        <!--type: decimal-->
+                        <Value>30</Value>
+                        <!--type: DimensionUnit - enumeration: [in,cm]-->
+                        <DimensionUnit>in</DimensionUnit>
+                     </Height>
+                     <!--Optional:-->
+                     <!--type: decimal-->
+                     <BasePrice>500</BasePrice>
+                     <!--Optional:-->
+                     <!--type: decimal-->
+                     <Charge>50</Charge>
+                  </LineItem>
+               </LineItemDetails>
+               <!--Optional:-->
+               <AccessorialParameters>
+                  <!--Zero or more repetitions:-->
+                  <BoolValuePair>
+                     <!--type: string-->
+                     <Keyword>2MEN</Keyword>
+                     <!--type: boolean-->
+                     <Value>true</Value>
+                  </BoolValuePair>
+               </AccessorialParameters>
+            </ShipmentDetails>
+            <!--type: boolean-->
+            <AppointmentFlag>false</AppointmentFlag>
+            <!--Optional:-->
+            <!--type: string-->
+            <AppointmentDate>false</AppointmentDate>
+            <!--Optional:-->
+            <!--type: string-->
+            <AppointmentStartTime></AppointmentStartTime>
+            <!--Optional:-->
+            <!--type: string-->
+            <AppointmentEndTime></AppointmentEndTime>
+            <!--type: boolean-->
+            <PickupFlag>false</PickupFlag>
+            <!--Optional:-->
+            <PickupInformation>
+               <!--type: string-->
+               <PickupDate>2026-02-16</PickupDate>
+               <!--type: string-->
+               <ReadyTime>15:00</ReadyTime>
+               <!--type: string-->
+               <CloseTime>18:00</CloseTime>
+               <!--Optional:-->
+               <PickUpOptions>
+                  <!--Zero or more repetitions:-->
+                  <BoolValuePair>
+                     <!--type: string-->
+                     <Keyword>2MEN</Keyword>
+                     <!--type: boolean-->
+                     <Value>true</Value>
+                  </BoolValuePair>
+               </PickUpOptions>
+               <!--Optional:-->
+               <!--type: string-->
+               <OtherOption></OtherOption>
+               <!--Optional:-->
+               <!--type: string-->
+               <StopNotes></StopNotes>
+               <!--Optional:-->
+               <!--type: string-->
+               <DriverNotes></DriverNotes>
+               <!--Optional:-->
+               <!--type: boolean-->
+               <PickUpConfirmationEmailFlag>true</PickUpConfirmationEmailFlag>
+            </PickupInformation>
+            <!--Optional:-->
+            <AlertInformation>
+               <!--Optional:-->
+               <AlertDetails>
+                  <!--Zero or more repetitions:-->
+                  <AlertDetail>
+                     <!--type: string-->
+                     <Type>POD</Type>
+                     <!--type: string-->
+                     <EmailAddress>test@purolator.com</EmailAddress>
+                  </AlertDetail>
+               </AlertDetails>
+            </AlertInformation>
+         </Shipment>
+      </CreateShipmentRequest>
+   </soapenv:Body>
+</soapenv:Envelope>
+"""
+    return soap_request.strip(), headers
+
+
 def build_freightestimate_payload(target: "ApiTarget", acct: str) -> tuple[str, dict[str, str]]:
     freight_acct = (
         getattr(settings, "PUROLATOR_UAT_FREIGHT_ACCOUNT", None)
@@ -855,4 +1351,45 @@ def build_return_payload(target: "ApiTarget", acct: str) -> tuple[str, dict[str,
   </soapenv:Body>
 </soapenv:Envelope>
 """
+    return soap_request.strip(), headers
+
+def build_docservice_payload(target: "ApiTarget", acct: str) -> tuple[str, dict[str, str]]:
+    docpin = (
+        getattr(settings, "PUROLATOR_DOC_PIN_UAT", None)
+        if _is_uat_target(target)
+        else getattr(settings, "PUROLATOR_DOC_PIN", None)
+    )
+    docpin = docpin or "520327338973"
+    headers = _base_headers(target)
+    soap_request = f"""<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:v1="http://purolator.com/pws/datatypes/v1">
+   <soapenv:Header>
+      <v1:RequestContext>
+         <v1:Version>1.7</v1:Version>
+         <v1:Language>en</v1:Language>
+         <v1:GroupID>11</v1:GroupID>
+         <v1:RequestReference>UserRef</v1:RequestReference>
+      </v1:RequestContext>
+   </soapenv:Header>
+   <soapenv:Body>
+      <v1:GetDocumentsRequest>
+
+<v1:OutputType>PDF</v1:OutputType>
+<v1:Synchronous>false</v1:Synchronous>
+         <v1:DocumentCriterium>
+            <!--Zero or more repetitions:-->
+            <v1:DocumentCriteria>
+               <v1:PIN>
+                  <v1:Value>{docpin}</v1:Value>
+               </v1:PIN>
+               <!--Optional:-->
+               <v1:DocumentTypes>
+                  <!--Zero or more repetitions:-->
+
+               </v1:DocumentTypes>
+            </v1:DocumentCriteria>
+         </v1:DocumentCriterium>
+      </v1:GetDocumentsRequest>
+   </soapenv:Body>
+</soapenv:Envelope>"""
     return soap_request.strip(), headers

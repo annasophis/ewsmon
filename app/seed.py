@@ -65,7 +65,19 @@ DEFAULT_TARGETS = [
         "soap_action": "http://purolator.com/pws/service/v1/Freight/GetEstimate",
         "api_type": "freightestimate",
     },
-        {
+    {
+        "name": "Freight Shipping Service",
+        "url": "https://webservices.purolator.com/EWS/V1/FreightShipping/FreightShippingService.asmx",
+        "soap_action": "http://purolator.com/pws/service/v1/Freight/CreateShipment",
+        "api_type": "freightshipping",
+    },
+    {
+        "name": "Documents Service",
+        "url": "https://webservices.purolator.com/EWS/V1/ShippingDocuments/ShippingDocumentsService.asmx",
+        "soap_action": "http://purolator.com/pws/service/v1/GetDocuments",
+        "api_type": "docservice",
+    },
+    {
         "name": "MyPurolator",
         "url": "https://ship.purolator.com/my",
         "soap_action": None,

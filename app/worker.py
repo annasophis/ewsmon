@@ -70,12 +70,14 @@ def build_payload(target: ApiTarget, acct: str) -> Tuple[Optional[str], Dict[str
         "track": payloads.build_track_payload,
         "freighttrack": payloads.build_freighttrack_payload,
         "freightestimate": payloads.build_freightestimate_payload,
+        "freightshipping": payloads.build_freightshipping_payload,
         "locate": payloads.build_locate_payload,
         "estimate": payloads.build_estimate_payload,
         "pickup": payloads.build_pickup_payload,
         "sa": payloads.build_sa_payload,
         "shiptrack": payloads.build_shiptrack_payload,
         "return": payloads.build_return_payload,
+        "docservice": payloads.build_docservice_payload,
     }
     builder = builders.get(target.api_type)
     if builder is not None:
