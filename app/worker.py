@@ -498,7 +498,7 @@ async def main():
                             continue
 
                         # State flip
-                        if not prev_up and current_up:
+                        if not prev_up and current_up and state.last_down_alert_ts is not None:
                             # DOWN -> UP: wait for one more UP before sending RECOVERED (stable)
                             state.pending_recovered = True
                             try:
