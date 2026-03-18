@@ -372,6 +372,7 @@ async def main():
                                 # Stable: two UPs in a row after a DOWN -> send RECOVERED
                                 state.pending_recovered = False
                                 state.consecutive_failures = 0
+                                state.last_down_alert_ts = None  # reset so the next incident starts fresh
                                 status_str = str(probe.get("status")) if probe.get("status") is not None else "timeout"
                                 latency = probe.get("ms")
                                 latency_str = f"{latency:.0f} ms" if latency is not None else "—"
